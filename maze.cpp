@@ -418,7 +418,7 @@ void mainloopdraw() {
   // Draw
   SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);
-  SDL_RenderCopy(renderer, tex, NULL, &screenRect);
+  SDL_RenderCopy(renderer, tex, NULL, NULL);
   SDL_RenderPresent(renderer);
   SDL_DestroyTexture(tex); 
 }
@@ -437,7 +437,7 @@ int main(int argc, char* argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
 
-	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN);
+	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
 	if (window == NULL) {
 		fprintf(stderr, "Error: %s\n", SDL_GetError());
 		return -1;
