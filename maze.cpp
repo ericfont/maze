@@ -423,25 +423,133 @@ void mainloopdraw() {
   SDL_DestroyTexture(tex); 
 }
 
+void PrintEvent(const SDL_Event * event)
+{
+    if (event->type == SDL_WINDOWEVENT) {
+        switch (event->window.event) {
+        case SDL_WINDOWEVENT_SHOWN:
+            printf("Window %d shown", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_HIDDEN:
+            printf("Window %d hidden", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_EXPOSED:
+            printf("Window %d exposed", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_MOVED:
+            printf("Window %d moved to %d,%d",
+                    event->window.windowID, event->window.data1,
+                    event->window.data2);
+            break;
+        case SDL_WINDOWEVENT_RESIZED:
+            printf("Window %d resized to %dx%d",
+                    event->window.windowID, event->window.data1,
+                    event->window.data2);
+            break;
+        case SDL_WINDOWEVENT_SIZE_CHANGED:
+            printf("Window %d size changed to %dx%d",
+                    event->window.windowID, event->window.data1,
+                    event->window.data2);
+            break;
+        case SDL_WINDOWEVENT_MINIMIZED:
+            printf("Window %d minimized", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_MAXIMIZED:
+            printf("Window %d maximized", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_RESTORED:
+            printf("Window %d restored", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_ENTER:
+            printf("Mouse entered window %d",
+                    event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_LEAVE:
+            printf("Mouse left window %d", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_FOCUS_GAINED:
+            printf("Window %d gained keyboard focus",
+                    event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_FOCUS_LOST:
+            printf("Window %d lost keyboard focus",
+                    event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_CLOSE:
+            printf("Window %d closed", event->window.windowID);
+            break;
+#if SDL_VERSION_ATLEAST(2, 0, 5)
+        case SDL_WINDOWEVENT_TAKE_FOCUS:
+            printf("Window %d is offered a focus", event->window.windowID);
+            break;
+        case SDL_WINDOWEVENT_HIT_TEST:
+            printf("Window %d has a special hit test", event->window.windowID);
+            break;
+#endif
+        default:
+            printf("Window %d got unknown event %d",
+                    event->window.windowID, event->window.event);
+            break;
+        }
+    }
+}
+
 void mainloop(void *arg) {
+	bool *receivedquit = (bool*) arg;
+	SDL_Event event;
+    while (SDL_PollEvent(&event)) 
+    {
+        switch (event.type) 
+        {
+        case SDL_QUIT:
+			printf("\nSDL_QUIT signal received.\n\n");
+#ifdef __EMSCRIPTEN__
+            emscripten_cancel_main_loop();
+#endif
+			*receivedquit = true;
+			return;
+        case SDL_WINDOWEVENT:
+			PrintEvent(&event);
+
+		}
+	}
+    
+		
+
 	mainloopdraw();
 
 	double time = SDL_GetTicks();
-  printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count, time-lasttime, 1000.0/(time-lasttime));
+ // printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count, time-lasttime, 1000.0/(time-lasttime));
 
   lasttime=time;
 	count++;
 }
 
+#ifdef __EMSCRIPTEN__
+EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawState)
+{
+  int newWidth = (int) e->windowInnerWidth;
+  int newHeight = (int) e->windowInnerHeight;
+
+  printf( "captureResizeEvent %d x %d\n", newWidth, newHeight);
+
+  emscripten_set_canvas_element_size("canvas", newWidth, newHeight);
+  SDL_SetWindowSize(window, newWidth, newHeight);
+
+  return 0;
+}
+#endif
+
 int main(int argc, char* argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
 
-	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE);
+	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW/2, SH/2, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
 	if (window == NULL) {
 		fprintf(stderr, "Error: %s\n", SDL_GetError());
 		return -1;
 	}
+SDL_SetWindowSize(window, SW*2, SH*2);
 
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (renderer == NULL) {
@@ -466,19 +574,15 @@ int main(int argc, char* argv[])
   Uint32 starttime = lasttime = SDL_GetTicks();
 #ifdef __EMSCRIPTEN__
   // Receives a function to call and some user data to provide it.
+  emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, captureResizeEvent);
   emscripten_set_main_loop_arg(mainloop, 0,-1, 1/*block*/);
  // emscripten_request_animation_frame_loop(one_iter, 0);
 #else
   while (1) {
-
-    	SDL_Event event;
-        SDL_PollEvent(&event);
-        if (event.type == SDL_QUIT) {
-			printf("Quitting\n");
-            break;
-        }
-
-    mainloop(0);
+	  bool receivedquit = false;
+	  mainloop((void *)(&receivedquit));
+	  if (receivedquit)
+	  	break;
     // Delay to keep frame rate constant (using SDL).
     SDL_Delay(16); // delay in milliseconds
   }
