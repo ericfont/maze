@@ -428,66 +428,66 @@ void PrintEvent(const SDL_Event * event)
     if (event->type == SDL_WINDOWEVENT) {
         switch (event->window.event) {
         case SDL_WINDOWEVENT_SHOWN:
-            printf("Window %d shown", event->window.windowID);
+            printf("Window %d shown\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_HIDDEN:
-            printf("Window %d hidden", event->window.windowID);
+            printf("Window %d hidden\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_EXPOSED:
-            printf("Window %d exposed", event->window.windowID);
+            printf("Window %d exposed\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_MOVED:
-            printf("Window %d moved to %d,%d",
+            printf("Window %d moved to %d,%d\n",
                     event->window.windowID, event->window.data1,
                     event->window.data2);
             break;
         case SDL_WINDOWEVENT_RESIZED:
-            printf("Window %d resized to %dx%d",
+            printf("Window %d resized to %dx%d\n",
                     event->window.windowID, event->window.data1,
                     event->window.data2);
             break;
         case SDL_WINDOWEVENT_SIZE_CHANGED:
-            printf("Window %d size changed to %dx%d",
+            printf("Window %d size changed to %dx%d\n",
                     event->window.windowID, event->window.data1,
                     event->window.data2);
             break;
         case SDL_WINDOWEVENT_MINIMIZED:
-            printf("Window %d minimized", event->window.windowID);
+            printf("Window %d minimized\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_MAXIMIZED:
-            printf("Window %d maximized", event->window.windowID);
+            printf("Window %d maximized\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_RESTORED:
-            printf("Window %d restored", event->window.windowID);
+            printf("Window %d restored\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_ENTER:
-            printf("Mouse entered window %d",
+            printf("Mouse entered window %d\n",
                     event->window.windowID);
             break;
         case SDL_WINDOWEVENT_LEAVE:
-            printf("Mouse left window %d", event->window.windowID);
+            printf("Mouse left window %d\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_FOCUS_GAINED:
-            printf("Window %d gained keyboard focus",
+            printf("Window %d gained keyboard focus\n",
                     event->window.windowID);
             break;
         case SDL_WINDOWEVENT_FOCUS_LOST:
-            printf("Window %d lost keyboard focus",
+            printf("Window %d lost keyboard focus\n",
                     event->window.windowID);
             break;
         case SDL_WINDOWEVENT_CLOSE:
-            printf("Window %d closed", event->window.windowID);
+            printf("Window %d closed\n", event->window.windowID);
             break;
 #if SDL_VERSION_ATLEAST(2, 0, 5)
         case SDL_WINDOWEVENT_TAKE_FOCUS:
-            printf("Window %d is offered a focus", event->window.windowID);
+            printf("Window %d is offered a focus\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_HIT_TEST:
-            printf("Window %d has a special hit test", event->window.windowID);
+            printf("Window %d has a special hit test\n", event->window.windowID);
             break;
 #endif
         default:
-            printf("Window %d got unknown event %d",
+            printf("Window %d got unknown event %d\n",
                     event->window.windowID, event->window.event);
             break;
         }
@@ -526,15 +526,40 @@ void mainloop(void *arg) {
 }
 
 #ifdef __EMSCRIPTEN__
-EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawState)
-{
-  int newWidth = (int) e->windowInnerWidth;
-  int newHeight = (int) e->windowInnerHeight;
+EM_JS(int, canvas_get_width, (), {
+  return canvas.width;
+});
 
-  printf( "captureResizeEvent %d x %d\n", newWidth, newHeight);
+EM_JS(int, canvas_get_height, (), {
+  return canvas.height;
+});
+
+EM_JS(int, body_get_width, (), {
+  var body = document.getElementsByTagName("body")[0];
+  return body.clientWidth;
+});
+
+EM_JS(int, body_get_height, (), {
+  var body = document.getElementsByTagName("body")[0];
+  return body.clientHeight;
+});
+
+void setNewCanvasSize(int newWidth, int newHeight)
+{
+  printf( "setNewCanvasSize %d x %d\n", newWidth, newHeight);
 
   emscripten_set_canvas_element_size("canvas", newWidth, newHeight);
   SDL_SetWindowSize(window, newWidth, newHeight);
+}
+
+EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawState)
+{
+  int newWidth = body_get_width();//(int) e->documentBodyClientWidth;
+  int newHeight = (int) e->windowInnerHeight;
+  printf( "captureResizeEvent %d x %d\n", newWidth, newHeight);
+
+  // give a little horizontal buffer space for possible scrollbar, and lots of vertical space for console
+  setNewCanvasSize(newWidth, newHeight - 300);
 
   return 0;
 }
@@ -573,6 +598,11 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
   Uint32 starttime = lasttime = SDL_GetTicks();
 #ifdef __EMSCRIPTEN__
+// Then call
+int width = body_get_width();
+int height = canvas_get_height();
+printf("setting initial canvas Size %d x %d\n", width, height);
+setNewCanvasSize(width, height);
   // Receives a function to call and some user data to provide it.
   emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, captureResizeEvent);
   emscripten_set_main_loop_arg(mainloop, 0,-1, 1/*block*/);
