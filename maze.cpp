@@ -1,4 +1,4 @@
-#include "ptc.h"
+#include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <math.h>
 
@@ -26,7 +26,6 @@
 #define r( color )	( ( (color) >> 16 ) & 255 )
 #define g( color )	( ( (color) >> 8 ) & 255 )
 #define b( color )	( (color) & 255 )
-
 float	fPlayerAngle	= 0.0f;
 float	fPlayerDeltaAngle = 0.0f;
 float	fPlayerX		= 0.5f;
@@ -44,10 +43,11 @@ bool bHorzWalls[ MH+1 ][ MW ];
 bool bVertWalls[ MH ][ MW+1 ];
 bool bVisited[ MH ][ MW ];
 
-int32 *pixel = NULL;
-int32 *textel= NULL;
-int32 *cloudel=NULL;
+Uint32 *pixel   = NULL;
+Uint32 *textel  = NULL;
+Uint32 *cloudel = NULL;
 
+/*
 int iPosDirs[24][4] = {
     { 0, 1, 2, 3 }, { 0, 1, 3, 2 }, { 0, 2, 1, 3 }, { 0, 2, 3, 1 }, { 0, 3, 1, 2 }, { 0, 3, 2, 1 },
     { 1, 0, 2, 3 }, { 1, 0, 3, 2 }, { 1, 2, 0, 3 }, { 1, 2, 3, 0 }, { 1, 3, 0, 2 }, { 1, 3, 2, 0 },
@@ -182,34 +182,6 @@ void vDrawMaze()
 	}
 }
 
-#include <fstream.h>
-void load(Surface &surface,char filename[])
-{
-    // open image file
-    ifstream is(filename,ios::in|ios::binary|ios::nocreate);
-
-    // check image file stream
-    if (!is) throw Error("could not load image");
-
-    // skip header
-    is.seekg(54);
-
-    // get surface dimensions
-    const int width  = surface.width();
-    const int height = surface.height();
-    
-    // allocate image pixels
-    char8 *pixels = new char8[width*height*3];
-
-    // read image pixels one line at a time
-    for (int y=height-1; y>=0; y--) is.read((char*)&pixels[width*y*3],width*3);
-
-    // load pixels to surface
-    surface.load(pixels,width,height,width*3,Format(24,0x00FF0000,0x0000FF00,0x000000FF),Palette());
-
-    // free image pixels
-    delete[] pixels;
-}
 
 float x, y, dx, dy, fDistVert, fDistHorz, fDist, fHorzV, fVertV, v, fTanAngle, fLineHeight, du, u, fLineStart, fLineFinish, fLineIntensity;	
 int32 top, bottom;
@@ -411,25 +383,58 @@ bool bTestIfCanMove()
 	}
 	return true;
 }
+*/
 
-int APIENTRY WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine,int nCmdShow)
+int main(int argc, char* argv[])
 {
-    try
-    {
-        Console console;
-        Format format(32,0x00FF0000,0x0000FF00,0x000000FF);
-        console.open("Eric Fontaine's Raycasting Maze",SW,SH,format);
+    SDL_Window *window;
+	SDL_Surface *screen;
+	SDL_Surface *texture;
+	SDL_Surface *clouds;
 
-        Surface surface(SW,SH,format);
+    SDL_Init(SDL_INIT_VIDEO); // init video
 
-		Surface texture(TW,TW*2,format);
-		load( texture, "wallmipmap.bmp" );
-		textel = (int32 *) texture.lock();
+    window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, 0);
 
-		Surface clouds(CW,CH,format);
-		load( clouds, "clouds.bmp" );
-		cloudel = (int32 *) clouds.lock();
+    // but instead of creating a renderer, we can draw directly to the screen
+    screen = SDL_GetWindowSurface(window);
 
+	// log info on surface format
+	SDL_PixelFormat* pixelFormat = screen->format;
+	Uint32 pixelFormatEnum = pixelFormat->format;
+	const char* surfacePixelFormatName = SDL_GetPixelFormatName(pixelFormatEnum);
+	SDL_Log("The screen's pixelformat is %s", surfacePixelFormatName);
+
+	// loads images
+    texture = SDL_LoadBMP("wallmipmap.bmp");
+    clouds = SDL_LoadBMP("clouds.bmp");
+
+	// get access to surfaces' pixel memory
+    SDL_LockSurface(texture);
+    SDL_LockSurface(clouds);
+    SDL_LockSurface(screen);
+
+	pixel = (Uint32 *) screen->pixels;
+	textel = (Uint32 *) texture->pixels;
+	cloudel = (Uint32 *) clouds->pixels;
+
+
+	pixel[1000] = 0XFFFFFF;
+    SDL_UpdateWindowSurface(window);
+	SDL_Log("Drew pixel");
+
+    // show image for 2 seconds
+    SDL_Delay(2000);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+
+    SDL_UnlockSurface(clouds);
+    SDL_UnlockSurface(texture);
+    SDL_FreeSurface(clouds);
+    SDL_FreeSurface(texture);
+    return 0;
+}
+/*
 		memset( bHorzWalls, true, sizeof( bHorzWalls ) );
 		memset( bVertWalls, true, sizeof( bVertWalls ) );
 		memset( bVisited, false, sizeof( bVisited ) );
@@ -491,7 +496,7 @@ int APIENTRY WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 				case Key::DOWN:
 					fPlayerSpeed -= 0.01f;
 					break;
-/*
+
 				case Key::PAGEDOWN:
 					if( iWallHeight > 0 )
 						iWallHeight--;
@@ -500,7 +505,7 @@ int APIENTRY WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
 				case Key::PAGEUP:
 					iWallHeight++;
 					break;
-*/
+
 				case Key::ESCAPE:
 					texture.unlock();
 					clouds.unlock();
@@ -544,4 +549,4 @@ int APIENTRY WinMain(HINSTANCE hInstance,HINSTANCE hPrevInstance,LPSTR lpCmdLine
         error.report();
     }
     return 0;
-}
+}*/
