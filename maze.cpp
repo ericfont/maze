@@ -423,6 +423,46 @@ void mainloopdraw() {
   SDL_DestroyTexture(tex); 
 }
 
+
+#ifdef __EMSCRIPTEN__
+EM_JS(int, canvas_get_width, (), {
+  return canvas.width;
+});
+
+EM_JS(int, canvas_get_height, (), {
+  return canvas.height;
+});
+
+EM_JS(int, body_get_width, (), {
+  var body = document.getElementsByTagName("body")[0];
+  return body.clientWidth;
+});
+
+EM_JS(int, body_get_height, (), {
+  var body = document.getElementsByTagName("body")[0];
+  return body.clientHeight;
+});
+
+void setNewCanvasSize(int newWidth, int newHeight)
+{
+  printf( "setNewCanvasSize %d x %d\n", newWidth, newHeight);
+
+  emscripten_set_canvas_element_size("canvas", newWidth, newHeight);
+  SDL_SetWindowSize(window, newWidth, newHeight);
+}
+
+EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawState)
+{
+  int newWidth = body_get_width();//(int) e->documentBodyClientWidth;
+  int newHeight = (int) e->windowInnerHeight;
+  printf( "captureResizeEvent %d x %d\n", newWidth, newHeight);
+
+  // give a vertical space for console
+  setNewCanvasSize(newWidth, newHeight - 300);
+
+  return 0;
+}
+
 void PrintEvent(const SDL_Event * event)
 {
     if (event->type == SDL_WINDOWEVENT) {
@@ -445,11 +485,13 @@ void PrintEvent(const SDL_Event * event)
             printf("Window %d resized to %dx%d\n",
                     event->window.windowID, event->window.data1,
                     event->window.data2);
+  			setNewCanvasSize(event->window.data1, event->window.data2/2 - 300);
             break;
         case SDL_WINDOWEVENT_SIZE_CHANGED:
             printf("Window %d size changed to %dx%d\n",
                     event->window.windowID, event->window.data1,
                     event->window.data2);
+  		//	setNewCanvasSize(event->window.data1, event->window.data2 - 300);
             break;
         case SDL_WINDOWEVENT_MINIMIZED:
             printf("Window %d minimized\n", event->window.windowID);
@@ -493,6 +535,7 @@ void PrintEvent(const SDL_Event * event)
         }
     }
 }
+#endif
 
 void mainloop(void *arg) {
 	bool *receivedquit = (bool*) arg;
@@ -509,7 +552,9 @@ void mainloop(void *arg) {
 			*receivedquit = true;
 			return;
         case SDL_WINDOWEVENT:
+#ifdef __EMSCRIPTEN__
 			PrintEvent(&event);
+#endif
 
 		}
 	}
@@ -525,45 +570,6 @@ void mainloop(void *arg) {
 	count++;
 }
 
-#ifdef __EMSCRIPTEN__
-EM_JS(int, canvas_get_width, (), {
-  return canvas.width;
-});
-
-EM_JS(int, canvas_get_height, (), {
-  return canvas.height;
-});
-
-EM_JS(int, body_get_width, (), {
-  var body = document.getElementsByTagName("body")[0];
-  return body.clientWidth;
-});
-
-EM_JS(int, body_get_height, (), {
-  var body = document.getElementsByTagName("body")[0];
-  return body.clientHeight;
-});
-
-void setNewCanvasSize(int newWidth, int newHeight)
-{
-  printf( "setNewCanvasSize %d x %d\n", newWidth, newHeight);
-
-  emscripten_set_canvas_element_size("canvas", newWidth, newHeight);
-  SDL_SetWindowSize(window, newWidth, newHeight);
-}
-
-EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawState)
-{
-  int newWidth = body_get_width();//(int) e->documentBodyClientWidth;
-  int newHeight = (int) e->windowInnerHeight;
-  printf( "captureResizeEvent %d x %d\n", newWidth, newHeight);
-
-  // give a little horizontal buffer space for possible scrollbar, and lots of vertical space for console
-  setNewCanvasSize(newWidth, newHeight - 300);
-
-  return 0;
-}
-#endif
 
 int main(int argc, char* argv[])
 {
