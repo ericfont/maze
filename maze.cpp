@@ -1,3 +1,9 @@
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#else
+#endif
+
 #include <SDL2/SDL.h>
 #include <stdlib.h>
 #include <math.h>
@@ -42,6 +48,13 @@ int iMipMapLevelRow[ SH/2 ];
 bool bHorzWalls[ MH+1 ][ MW ];
 bool bVertWalls[ MH ][ MW+1 ];
 bool bVisited[ MH ][ MW ];
+
+SDL_Window *window;
+SDL_Renderer *renderer;
+
+SDL_Surface *screen;
+SDL_Surface *texture;
+SDL_Surface *clouds;
 
 Uint32 *pixel   = NULL;
 Uint32 *textel  = NULL;
@@ -384,54 +397,157 @@ bool bTestIfCanMove()
 	return true;
 }
 */
+int count = 0;
+double lasttime = 0;
+SDL_Rect screenRect {0, 0, SW, SH};
+
+bool mainloop(double time) {
+  SDL_FillRect(screen, NULL, SDL_MapRGBA(screen->format, 0xcc, 0xcc, 0xcc, 0xff));
+  SDL_LockSurface(screen);
+  //  SDL_LockSurface(screen);
+	pixel = (Uint32 *) screen->pixels;
+	pixel[count] = 0XFFFFFF;
+
+	
+  SDL_UnlockSurface(screen);
+
+  //
+  // Draw
+  //
+  SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, screen);
+  SDL_RenderClear(renderer);
+  SDL_RenderCopy(renderer, tex, NULL, &screenRect);
+  SDL_RenderPresent(renderer);
+  SDL_DestroyTexture(tex);
+
+  //  SDL_UnlockSurface(screen);
+  //  SDL_UpdateWindowSurface(window);
+/*
+
+  SDL_Texture *screentexture = SDL_CreateTextureFromSurface(renderer, screen);
+  SDL_RenderClear(renderer);
+  SDL_RenderCopy(renderer, screentexture, NULL, &screenRect);
+  SDL_RenderPresent(renderer);
+  SDL_DestroyTexture(screentexture);*/
+
+  printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count++, time-lasttime, 1000.0/(time-lasttime));
+
+  lasttime=time;
+
+  return true;
+}
+
+#ifdef __EMSCRIPTEN__
+// Our "main loop" function. This callback receives the current time as
+// reported by the browser, and the user data we provide in the call to
+// emscripten_request_animation_frame_loop().
+EM_BOOL one_iter(double time, void* userData) {
+  mainloop(time);
+
+  // Return true to keep the loop running.
+  return EM_TRUE;
+}
+#endif
+
+
+void Loop(void *arg) {
+
+  //
+  // Manipulate
+  //
+  // if arg2 is NULL, draw all surface.
+  SDL_FillRect(screen, NULL, SDL_MapRGBA(screen->format, 0xcc, 0xcc, 0xcc, 0xff));
+  SDL_LockSurface(screen);
+  // ARGB
+  *((int*)screen->pixels + 0) = 0xFFFF0000;
+  *((int*)screen->pixels + 1) = 0xFF00FF00;
+  *((int*)screen->pixels + 2) = 0xFF0000FF;
+  *((int*)screen->pixels + 3) = 0xFFFFFFFF;
+  *((int*)screen->pixels + 4) = 0x00000000;
+
+  *((int*)screen->pixels + 95)= 0xFF000000; 
+  SDL_UnlockSurface(screen);
+
+  //
+  // Draw
+  //
+  SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, screen);
+  SDL_RenderClear(renderer);
+  SDL_RenderCopy(renderer, tex, NULL, &screenRect);
+  SDL_RenderPresent(renderer);
+  SDL_DestroyTexture(tex);
+}
+
 
 int main(int argc, char* argv[])
 {
-    SDL_Window *window;
-	SDL_Surface *screen;
-	SDL_Surface *texture;
-	SDL_Surface *clouds;
+    SDL_Init(SDL_INIT_VIDEO);
 
-    SDL_Init(SDL_INIT_VIDEO); // init video
+	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN);
+	if (window == NULL) {
+		fprintf(stderr, "Error: %s\n", SDL_GetError());
+		return -1;
+	}
 
-    window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, 0);
+	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+	if (renderer == NULL) {
+		fprintf(stderr, "Error: %s\n", SDL_GetError());
+		return -1;
+	}
+ 
+	// screen is the SW*SH surface where pixel editing is done
+//	screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_RGB24);
+  screen = SDL_CreateRGBSurface(0, 64, 32, 32, 0, 0, 0, 0);
+	printf("screen format: %s\n", SDL_GetPixelFormatName(screen->format->format));
 
-    // but instead of creating a renderer, we can draw directly to the screen
-    screen = SDL_GetWindowSurface(window);
-
-	// log info on surface format
-	SDL_PixelFormat* pixelFormat = screen->format;
-	Uint32 pixelFormatEnum = pixelFormat->format;
-	const char* surfacePixelFormatName = SDL_GetPixelFormatName(pixelFormatEnum);
-	SDL_Log("The screen's pixelformat is %s", surfacePixelFormatName);
 
 	// loads images
-    texture = SDL_LoadBMP("wallmipmap.bmp");
+/*    texture = SDL_LoadBMP("wallmipmap.bmp");
     clouds = SDL_LoadBMP("clouds.bmp");
-
-	// get access to surfaces' pixel memory
     SDL_LockSurface(texture);
     SDL_LockSurface(clouds);
-    SDL_LockSurface(screen);
-
-	pixel = (Uint32 *) screen->pixels;
 	textel = (Uint32 *) texture->pixels;
-	cloudel = (Uint32 *) clouds->pixels;
+	cloudel = (Uint32 *) clouds->pixels;*/
+
+#ifdef __EMSCRIPTEN__
+  // Receives a function to call and some user data to provide it.
+  emscripten_set_main_loop_arg(Loop, 0,-1, 1/*block*/);
+ // emscripten_request_animation_frame_loop(one_iter, 0);
+#else
+  Uint32 starttime = lasttime = SDL_GetTicks();
+  while (1) {
+
+    	SDL_Event event;
+        SDL_PollEvent(&event);
+        if (event.type == SDL_QUIT) {
+			printf("Quitting\n");
+            break;
+        }
+
+    mainloop(SDL_GetTicks()-starttime);
+    // Delay to keep frame rate constant (using SDL).
+    SDL_Delay(16); // delay in milliseconds
+  }
+#endif
 
 
-	pixel[1000] = 0XFFFFFF;
-    SDL_UpdateWindowSurface(window);
-	SDL_Log("Drew pixel");
+ // emscripten_request_animation_frame_loop(one_iter, 0);
 
-    // show image for 2 seconds
-    SDL_Delay(2000);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+			printf("Quitting\n");
+    SDL_Delay(1000); // delay in milliseconds
 
-    SDL_UnlockSurface(clouds);
+ /*   SDL_UnlockSurface(clouds);
+			printf("Quitting\n");
     SDL_UnlockSurface(texture);
+			printf("Quitting\n");
     SDL_FreeSurface(clouds);
+			printf("Quitting\n");
     SDL_FreeSurface(texture);
+			printf("Quitting\n");*/
+    SDL_DestroyWindow(window);
+			printf("Quitting\n");
+    SDL_Quit();
+			printf("Quitting\n");
     return 0;
 }
 /*
