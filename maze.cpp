@@ -401,8 +401,7 @@ int count = 0;
 double lasttime = 0;
 SDL_Rect screenRect {0, 0, SW, SH};
 
-void mainloopdraw(void *arg) {
-	count++;
+void mainloopdraw() {
 
   SDL_FillRect(screen, NULL, SDL_MapRGBA(screen->format, 0xcc, 0xcc, 0xcc, 0xff));
   SDL_LockSurface(screen);
@@ -424,27 +423,15 @@ void mainloopdraw(void *arg) {
   SDL_DestroyTexture(tex); 
 }
 
-bool mainloop(double time) {
-	mainloopdraw(0);
+void mainloop(void *arg) {
+	mainloopdraw();
 
+	double time = SDL_GetTicks();
   printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count, time-lasttime, 1000.0/(time-lasttime));
 
   lasttime=time;
-
-  return true;
+	count++;
 }
-
-#ifdef __EMSCRIPTEN__
-// Our "main loop" function. This callback receives the current time as
-// reported by the browser, and the user data we provide in the call to
-// emscripten_request_animation_frame_loop().
-EM_BOOL one_iter(double time, void* userData) {
-  mainloop(time);
-
-  // Return true to keep the loop running.
-  return EM_TRUE;
-}
-#endif
 
 int main(int argc, char* argv[])
 {
@@ -476,12 +463,12 @@ int main(int argc, char* argv[])
 	textel = (Uint32 *) texture->pixels;
 	cloudel = (Uint32 *) clouds->pixels;*/
 
+  Uint32 starttime = lasttime = SDL_GetTicks();
 #ifdef __EMSCRIPTEN__
   // Receives a function to call and some user data to provide it.
-  emscripten_set_main_loop_arg(mainloopdraw, 0,-1, 1/*block*/);
+  emscripten_set_main_loop_arg(mainloop, 0,-1, 1/*block*/);
  // emscripten_request_animation_frame_loop(one_iter, 0);
 #else
-  Uint32 starttime = lasttime = SDL_GetTicks();
   while (1) {
 
     	SDL_Event event;
@@ -491,7 +478,7 @@ int main(int argc, char* argv[])
             break;
         }
 
-    mainloop(SDL_GetTicks()-starttime);
+    mainloop(0);
     // Delay to keep frame rate constant (using SDL).
     SDL_Delay(16); // delay in milliseconds
   }
