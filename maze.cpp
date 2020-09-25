@@ -401,36 +401,33 @@ int count = 0;
 double lasttime = 0;
 SDL_Rect screenRect {0, 0, SW, SH};
 
-bool mainloop(double time) {
+void mainloopdraw(void *arg) {
+	count++;
+
   SDL_FillRect(screen, NULL, SDL_MapRGBA(screen->format, 0xcc, 0xcc, 0xcc, 0xff));
   SDL_LockSurface(screen);
-  //  SDL_LockSurface(screen);
-	pixel = (Uint32 *) screen->pixels;
-	pixel[count] = 0XFFFFFF;
+  // ARGB
+  *((int*)screen->pixels + 0) = 0xFFFF0000;
+  *((int*)screen->pixels + 1) = 0xFF00FF00;
+  *((int*)screen->pixels + 2) = 0xFF0000FF;
+  *((int*)screen->pixels + 3) = 0xFFFFFFFF;
+  *((int*)screen->pixels + 4) = 0x00000000;
 
-	
+  *((int*)screen->pixels + count)= 0xFF000000;  // moving pixel
   SDL_UnlockSurface(screen);
 
-  //
   // Draw
-  //
   SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);
   SDL_RenderCopy(renderer, tex, NULL, &screenRect);
   SDL_RenderPresent(renderer);
-  SDL_DestroyTexture(tex);
+  SDL_DestroyTexture(tex); 
+}
 
-  //  SDL_UnlockSurface(screen);
-  //  SDL_UpdateWindowSurface(window);
-/*
+bool mainloop(double time) {
+	mainloopdraw(0);
 
-  SDL_Texture *screentexture = SDL_CreateTextureFromSurface(renderer, screen);
-  SDL_RenderClear(renderer);
-  SDL_RenderCopy(renderer, screentexture, NULL, &screenRect);
-  SDL_RenderPresent(renderer);
-  SDL_DestroyTexture(screentexture);*/
-
-  printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count++, time-lasttime, 1000.0/(time-lasttime));
+  printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count, time-lasttime, 1000.0/(time-lasttime));
 
   lasttime=time;
 
@@ -448,36 +445,6 @@ EM_BOOL one_iter(double time, void* userData) {
   return EM_TRUE;
 }
 #endif
-
-
-void Loop(void *arg) {
-
-  //
-  // Manipulate
-  //
-  // if arg2 is NULL, draw all surface.
-  SDL_FillRect(screen, NULL, SDL_MapRGBA(screen->format, 0xcc, 0xcc, 0xcc, 0xff));
-  SDL_LockSurface(screen);
-  // ARGB
-  *((int*)screen->pixels + 0) = 0xFFFF0000;
-  *((int*)screen->pixels + 1) = 0xFF00FF00;
-  *((int*)screen->pixels + 2) = 0xFF0000FF;
-  *((int*)screen->pixels + 3) = 0xFFFFFFFF;
-  *((int*)screen->pixels + 4) = 0x00000000;
-
-  *((int*)screen->pixels + 95)= 0xFF000000; 
-  SDL_UnlockSurface(screen);
-
-  //
-  // Draw
-  //
-  SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, screen);
-  SDL_RenderClear(renderer);
-  SDL_RenderCopy(renderer, tex, NULL, &screenRect);
-  SDL_RenderPresent(renderer);
-  SDL_DestroyTexture(tex);
-}
-
 
 int main(int argc, char* argv[])
 {
@@ -497,7 +464,7 @@ int main(int argc, char* argv[])
  
 	// screen is the SW*SH surface where pixel editing is done
 //	screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_RGB24);
-  screen = SDL_CreateRGBSurface(0, 64, 32, 32, 0, 0, 0, 0);
+  screen = SDL_CreateRGBSurface(0, SW, SH, 32, 0, 0, 0, 0);
 	printf("screen format: %s\n", SDL_GetPixelFormatName(screen->format->format));
 
 
@@ -511,7 +478,7 @@ int main(int argc, char* argv[])
 
 #ifdef __EMSCRIPTEN__
   // Receives a function to call and some user data to provide it.
-  emscripten_set_main_loop_arg(Loop, 0,-1, 1/*block*/);
+  emscripten_set_main_loop_arg(mainloopdraw, 0,-1, 1/*block*/);
  // emscripten_request_animation_frame_loop(one_iter, 0);
 #else
   Uint32 starttime = lasttime = SDL_GetTicks();
