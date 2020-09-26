@@ -57,14 +57,18 @@ SDL_Renderer *renderer;
 
 SDL_Surface *screen;
 SDL_Surface *wallTexture;
+SDL_Surface *soldTexture;
 SDL_Surface *floorTexture;
 SDL_Surface *cloudTexture;
-SDL_Surface *covidTexture;
+SDL_Surface *covidSurface;
+
+SDL_Texture *covidTexture;
 
 typedef Sint32 int32;
 
 int32 *pixel   = NULL;
 int32 *wallTextel  = NULL;
+int32 *soldTextel  = NULL;
 int32 *floorTextel  = NULL;
 int32 *cloudTextel = NULL;
 
@@ -341,8 +345,25 @@ void vRaycast()
 			fCloudU += fCloudDU;
 		}
 
-		// actually draw the line
-        int32 *WallTextureWalloffset = &wallTextel[ int( v * float(iMipMapWidth) ) * TW + iMipMapOffset ];
+        // actually draw the ray's pixel column
+
+        // use different texture based on whether visited yet
+        int textureOffset = int( v * float(iMipMapWidth) ) * TW + iMipMapOffset;
+        int32 *WallTextureWalloffset;
+        if (x < 0.0f)
+            x = 0;
+        if (x >= MW)
+            x = MW-1;
+        if (y < 0.0f)
+            y = 0;
+        if (y >= MH)
+            y = MH-1;
+
+        if( bVisited[(int)y][(int)x] )
+            WallTextureWalloffset = &wallTextel[textureOffset];
+        else
+            WallTextureWalloffset = &soldTextel[textureOffset];
+
 		pixelend = &pixel[ ray + kMultiplySW( iLineFinish ) ];
 
 		for( ; pixeloffset < pixelend; pixeloffset += SW )
@@ -412,7 +433,7 @@ void copyScreenPixelsToWindow() {
   SDL_Texture *screenScalingTexture = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);  
   SDL_RenderCopy(renderer, screenScalingTexture, NULL, NULL);
- // SDL_RenderCopy(renderer, covidTexture, NULL, NULL);
+  SDL_RenderCopy(renderer, covidTexture, NULL, NULL);
   SDL_RenderPresent(renderer);
   SDL_DestroyTexture(screenScalingTexture);
 }
@@ -615,23 +636,30 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     /////////////////////
 
     SDL_PixelFormat *format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
-    SDL_Surface *wallTextureBMP, *floorTextureBMP, *cloudTextureBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
+    SDL_Surface *wallTextureBMP, *soldTextureBMP, *floorTextureBMP, *cloudTextureBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
     if(!(wallTextureBMP = SDL_LoadBMP("assets/images/wallmipmap.bmp"))) SDL_Log("SDL_LoadBMP wallTextureBMP failed: %s\n", SDL_GetError());
+    if(!(soldTextureBMP = SDL_LoadBMP("assets/images/soldmipmap.bmp"))) SDL_Log("SDL_LoadBMP soldTextureBMP failed: %s\n", SDL_GetError());
     if(!(floorTextureBMP = SDL_LoadBMP("assets/images/floormipmap.bmp"))) SDL_Log("SDL_LoadBMP textureFloorBMP failed: %s\n", SDL_GetError());
     if(!(cloudTextureBMP = SDL_LoadBMP("assets/images/clouds.bmp")))      SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
-    if(!(covidTexture = SDL_LoadBMP("assets/images/covid-transparent-256x256.bmp")))      SDL_Log("SDL_LoadBMP covidTexture failed: %s\n", SDL_GetError());
-    if(!(wallTexture = SDL_ConvertSurface(wallTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface WallTextureWall failed: %s\n", SDL_GetError());
-    if(!(floorTexture = SDL_ConvertSurface(floorTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface WallTextureWall failed: %s\n", SDL_GetError());
-    if(!(cloudTexture = SDL_ConvertSurface(cloudTextureBMP, format, 0)))        SDL_Log("SDL_ConvertSurface clouds failed: %s\n", SDL_GetError());
+    if(!(covidSurface = SDL_LoadBMP("assets/images/covid-transparent-256x256.bmp")))      SDL_Log("SDL_LoadBMP covidTexture failed: %s\n", SDL_GetError());
+    if(!(wallTexture = SDL_ConvertSurface(wallTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface wallTextureBMP failed: %s\n", SDL_GetError());
+    if(!(soldTexture = SDL_ConvertSurface(soldTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface soldTextureBMP failed: %s\n", SDL_GetError());
+    if(!(floorTexture = SDL_ConvertSurface(floorTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface floorTextureBMP failed: %s\n", SDL_GetError());
+    if(!(cloudTexture = SDL_ConvertSurface(cloudTextureBMP, format, 0)))        SDL_Log("SDL_ConvertSurface cloudTextureBMP failed: %s\n", SDL_GetError());
     SDL_FreeSurface(wallTextureBMP);
+    SDL_FreeSurface(soldTextureBMP);
     SDL_FreeSurface(floorTextureBMP);
     SDL_FreeSurface(cloudTextureBMP);
     SDL_FreeFormat(format);
 
+    covidTexture = SDL_CreateTextureFromSurface(renderer, covidSurface);
+
     SDL_LockSurface(wallTexture);
+    SDL_LockSurface(soldTexture);
     SDL_LockSurface(floorTexture);
     SDL_LockSurface(cloudTexture);
     wallTextel = (int32 *) wallTexture->pixels;
+    soldTextel = (int32 *) soldTexture->pixels;
     floorTextel = (int32 *) floorTexture->pixels;
     cloudTextel = (int32 *) cloudTexture->pixels;
 
@@ -646,6 +674,18 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     srand( starttime );
 
     vGenerateMaze( 0, 0 );
+
+    int numberStockedShelves = 0;
+    while( numberStockedShelves < MW * MH / 2 ) // 50% of the shelves will be stocked (i.e. !bVisited)
+    {
+        int x = rand() % MW;
+        int y = rand() % MH;
+        if( bVisited[y][x] )
+        {
+            bVisited[y][x] = 0;
+            numberStockedShelves++;
+        }
+    }
 
     for( ray = 0; ray < SW; ray++ )
         fFishFactor[ ray ] = (float) cos( ( float(ray) / float(SW) * FOV ) - ( FOV / 2.0f ) );
@@ -700,13 +740,16 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
     SDL_Log("Quitting\n");
     SDL_UnlockSurface(wallTexture);
+    SDL_UnlockSurface(soldTexture);
     SDL_UnlockSurface(floorTexture);
     SDL_UnlockSurface(cloudTexture);
     SDL_FreeSurface(wallTexture);
+    SDL_FreeSurface(soldTexture);
     SDL_FreeSurface(floorTexture);
     SDL_FreeSurface(cloudTexture);
-    SDL_FreeSurface(covidTexture);
+    SDL_FreeSurface(covidSurface);
     SDL_FreeSurface(screen);
+    SDL_DestroyTexture(covidTexture);
     SDL_DestroyWindow(window);
     SDL_Quit();
     SDL_Log("Bye!\n");
