@@ -568,12 +568,15 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
 
 	// loads images
-    texture = SDL_LoadBMP("assets/images/wallmipmap.bmp");
-    clouds = SDL_LoadBMP("assets/images/clouds.bmp");
-//    SDL_LockSurface(texture);
-//    SDL_LockSurface(clouds);
-//	textel = (Uint32 *) texture->pixels;
-//    cloudel = (Uint32 *) clouds->pixels;
+    if(!(texture = SDL_LoadBMP("assets/images/wallmipmap.bmp")))
+        SDL_Log("SDL_LoadBMP texture failed: %s\n", SDL_GetError());
+    if(!(clouds = SDL_LoadBMP("assets/images/clouds.bmp")))
+        SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
+
+    SDL_LockSurface(texture);
+    SDL_LockSurface(clouds);
+    textel = (Uint32 *) texture->pixels;
+    cloudel = (Uint32 *) clouds->pixels;
 
   Uint32 starttime = lasttime = SDL_GetTicks();
 #ifdef __EMSCRIPTEN__
@@ -594,24 +597,14 @@ SDL_SetWindowSize(window, SW*2, SH*2);
   }
 #endif
 
-
- // emscripten_request_animation_frame_loop(one_iter, 0);
-
-			printf("Quitting\n");
-    SDL_Delay(1000); // delay in milliseconds
-
- /*   SDL_UnlockSurface(clouds);
-			printf("Quitting\n");
+    SDL_Log("Quitting\n");
+    SDL_UnlockSurface(clouds);
     SDL_UnlockSurface(texture);
-			printf("Quitting\n");
     SDL_FreeSurface(clouds);
-			printf("Quitting\n");
     SDL_FreeSurface(texture);
-			printf("Quitting\n");*/
     SDL_DestroyWindow(window);
-			printf("Quitting\n");
     SDL_Quit();
-			printf("Quitting\n");
+    SDL_Log("Bye!\n");
     return 0;
 }
 /*
