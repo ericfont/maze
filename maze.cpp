@@ -516,71 +516,6 @@ EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawS
 
   return 0;
 }
-
-void PrintEvent(const SDL_Event * event)
-{
-    if (event->type == SDL_WINDOWEVENT) {
-        switch (event->window.event) {
-        case SDL_WINDOWEVENT_SHOWN:
-            printf("Window %d shown\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_HIDDEN:
-            printf("Window %d hidden\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_EXPOSED:
-            printf("Window %d exposed\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_MOVED:
-            printf("Window %d moved to %d,%d\n",
-                    event->window.windowID, event->window.data1,
-                    event->window.data2);
-            break;
-        case SDL_WINDOWEVENT_RESIZED:
-            printf("Window %d resized to %dx%d\n",
-                    event->window.windowID, event->window.data1,
-                    event->window.data2);
-            setNewCanvasSize(event->window.data1, event->window.data2 - 300);
-            break;
-        case SDL_WINDOWEVENT_SIZE_CHANGED:
-            printf("Window %d size changed to %dx%d\n",
-                    event->window.windowID, event->window.data1,
-                    event->window.data2);
-            break;
-        case SDL_WINDOWEVENT_MINIMIZED:
-            printf("Window %d minimized\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_MAXIMIZED:
-            printf("Window %d maximized\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_RESTORED:
-            printf("Window %d restored\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_FOCUS_GAINED:
-            printf("Window %d gained keyboard focus\n",
-                    event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_FOCUS_LOST:
-            printf("Window %d lost keyboard focus\n",
-                    event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_CLOSE:
-            printf("Window %d closed\n", event->window.windowID);
-            break;
-#if SDL_VERSION_ATLEAST(2, 0, 5)
-        case SDL_WINDOWEVENT_TAKE_FOCUS:
-            printf("Window %d is offered a focus\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_HIT_TEST:
-            printf("Window %d has a special hit test\n", event->window.windowID);
-            break;
-#endif
-        default:
-            printf("Window %d got unknown event %d\n",
-                    event->window.windowID, event->window.event);
-            break;
-        }
-    }
-}
 #endif
 
 void mainloop(void *arg)
@@ -595,16 +530,9 @@ void mainloop(void *arg)
             emscripten_cancel_main_loop();
 #endif
 			*receivedquit = true;
-			return;
-        case SDL_WINDOWEVENT:
-//#ifdef __EMSCRIPTEN__
-//			PrintEvent(&event);
-//#endif
-break;
+            return;
 		}
-	}
-    
-		
+    }
 
 	mainloopdraw();
 
