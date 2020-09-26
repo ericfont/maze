@@ -562,8 +562,7 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 	}
  
     // screen is the SW*SH surface where pixel editing is done, which gets resized to window or canvas
-    screen = SDL_CreateRGBSurface(0, SW, SH, 32, 0, 0, 0, 0);
-    SDL_Log("screen format: %s\n", SDL_GetPixelFormatName(screen->format->format));
+    screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_BGR24);
 
 	// loads images
     if(!(texture = SDL_LoadBMP("assets/images/wallmipmap.bmp")))
