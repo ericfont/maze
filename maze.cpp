@@ -372,7 +372,7 @@ void vRaycast()
 			angle -= TWOPI;
 	}
 }
-/*
+
 bool bTestIfCanMove()
 {
 	if( fNewX < 0.0f || fNewY < 0.0f )
@@ -400,7 +400,7 @@ bool bTestIfCanMove()
 	}
 	return true;
 }
-*/
+
 int count = 0;
 double lasttime = 0;
 SDL_Rect screenRect {0, 0, SW, SH};
@@ -561,12 +561,12 @@ void mainloop(void *arg)
     fNewY = fPlayerY + (float) sin( fPlayerAngle ) * fPlayerSpeed;
     fNewX = fPlayerX + (float) cos( fPlayerAngle ) * fPlayerSpeed;
 
-    /*if( bTestIfCanMove() )
+    if( bTestIfCanMove() )
     {
         fPlayerY = fNewY;
         fPlayerX = fNewX;
     }
-    else*/
+    else
         fPlayerSpeed = 0.0f;
 
 
