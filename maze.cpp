@@ -45,7 +45,7 @@ float fFishFactor[ SW ];
 float fNewX, fNewY;
 int ray,i,row;
 
-int iMipMapTextureOffset[ 9 ];
+int iMipMapWallTextureOffset[ 9 ];
 int iMipMapLevelRow[ SH/2 ];
 
 bool bHorzWalls[ MH+1 ][ MW ];
@@ -56,14 +56,16 @@ SDL_Window *window;
 SDL_Renderer *renderer;
 
 SDL_Surface *screen;
-SDL_Surface *texture;
-SDL_Surface *clouds;
+SDL_Surface *wallTexture;
+SDL_Surface *floorTexture;
+SDL_Surface *cloudTexture;
 
 typedef Sint32 int32;
 
 int32 *pixel   = NULL;
-int32 *textel  = NULL;
-int32 *cloudel = NULL;
+int32 *wallTextel  = NULL;
+int32 *floorTextel  = NULL;
+int32 *cloudTextel = NULL;
 
 int iPosDirs[24][4] = {
     { 0, 1, 2, 3 }, { 0, 1, 3, 2 }, { 0, 2, 1, 3 }, { 0, 2, 3, 1 }, { 0, 3, 1, 2 }, { 0, 3, 2, 1 },
@@ -309,7 +311,7 @@ void vRaycast()
 		else
 			iMipMapLevel = 8;
 
-		iMipMapOffset= iMipMapTextureOffset[ iMipMapLevel ];
+        iMipMapOffset= iMipMapWallTextureOffset[ iMipMapLevel ];
 		iMipMapWidth = 1 << iMipMapLevel;
 		du = float(iMipMapWidth) / float(iLineHeight);
 
@@ -328,23 +330,23 @@ void vRaycast()
 
 		// draw clouds
 		int32 *pixeloffset = &pixel[ ray ];
-		int32 *cloudeloffset = &cloudel[ int( angle / TWOPI * float(CH) ) * CW ];
+        int32 *cloudTexteloffset = &cloudTextel[ int( angle / TWOPI * float(CH) ) * CW ];
 		int32 *pixelend = pixeloffset + kMultiplySW( iLineStart );
 		float fCloudU = 0.0f;
 		float fCloudDU = float(CW) / float(SH/2);
 		for( ; pixeloffset < pixelend; pixeloffset += SW )
 		{
-			*pixeloffset = cloudeloffset[ int(fCloudU) ];
+            *pixeloffset = cloudTexteloffset[ int(fCloudU) ];
 			fCloudU += fCloudDU;
 		}
 
 		// actually draw the line
-		int32 *textureoffset = &textel[ int( v * float(iMipMapWidth) ) * TW + iMipMapOffset ];
+        int32 *WallTextureWalloffset = &wallTextel[ int( v * float(iMipMapWidth) ) * TW + iMipMapOffset ];
 		pixelend = &pixel[ ray + kMultiplySW( iLineFinish ) ];
 
 		for( ; pixeloffset < pixelend; pixeloffset += SW )
 		{
-			*pixeloffset = *(textureoffset + int(u) ) ;
+            *pixeloffset = *(WallTextureWalloffset + int(u) ) ;
 			u += du;
 		}
 
@@ -360,9 +362,9 @@ void vRaycast()
 			v = fPlayerX + fCosAngle * fDist;
 			u = fPlayerY + fSinAngle * fDist;
 			iMipMapLevel = iMipMapLevelRow[ row ];
-			iMipMapOffset= iMipMapTextureOffset[ iMipMapLevel ];
+            iMipMapOffset= iMipMapWallTextureOffset[ iMipMapLevel ];
 			iMipMapWidth = 1 << (iMipMapLevel);
-			*pixeloffset = textel[ int( ( v - float( int( v ) ) ) * float(iMipMapWidth) ) * TW + int( ( u - float( int( u ) ) ) * float(iMipMapWidth) ) + iMipMapOffset ];
+            *pixeloffset = floorTextel[ int( ( v - float( int( v ) ) ) * float(iMipMapWidth) ) * TW + int( ( u - float( int( u ) ) ) * float(iMipMapWidth) ) + iMipMapOffset ];
 			pixeloffset += SW;
 		}
 
@@ -406,11 +408,11 @@ double lasttime = 0;
 SDL_Rect screenRect {0, 0, SW, SH};
 
 void copyScreenPixelsToWindow() {
-  SDL_Texture *screenTexture = SDL_CreateTextureFromSurface(renderer, screen);
+  SDL_Texture *screenWallTexture = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);  
-  SDL_RenderCopy(renderer, screenTexture, NULL, NULL);
+  SDL_RenderCopy(renderer, screenWallTexture, NULL, NULL);
   SDL_RenderPresent(renderer);
-  SDL_DestroyTexture(screenTexture);
+  SDL_DestroyTexture(screenWallTexture);
 }
 
 
@@ -611,19 +613,24 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     /////////////////////
 
     SDL_PixelFormat *format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
-    SDL_Surface *textureBMP, *cloudsBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
-    if(!(textureBMP = SDL_LoadBMP("assets/images/wallmipmap.bmp"))) SDL_Log("SDL_LoadBMP texture failed: %s\n", SDL_GetError());
-    if(!(cloudsBMP = SDL_LoadBMP("assets/images/clouds.bmp")))      SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
-    if(!(texture = SDL_ConvertSurface(textureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface texture failed: %s\n", SDL_GetError());
-    if(!(clouds = SDL_ConvertSurface(cloudsBMP, format, 0)))        SDL_Log("SDL_ConvertSurface clouds failed: %s\n", SDL_GetError());
-    SDL_FreeSurface(textureBMP);
-    SDL_FreeSurface(cloudsBMP);
+    SDL_Surface *wallTextureBMP, *floorTextureBMP, *cloudTextureBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
+    if(!(wallTextureBMP = SDL_LoadBMP("assets/images/wallmipmap.bmp"))) SDL_Log("SDL_LoadBMP wallTextureBMP failed: %s\n", SDL_GetError());
+    if(!(floorTextureBMP = SDL_LoadBMP("assets/images/floormipmap.bmp"))) SDL_Log("SDL_LoadBMP textureFloorBMP failed: %s\n", SDL_GetError());
+    if(!(cloudTextureBMP = SDL_LoadBMP("assets/images/clouds.bmp")))      SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
+    if(!(wallTexture = SDL_ConvertSurface(wallTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface WallTextureWall failed: %s\n", SDL_GetError());
+    if(!(floorTexture = SDL_ConvertSurface(floorTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface WallTextureWall failed: %s\n", SDL_GetError());
+    if(!(cloudTexture = SDL_ConvertSurface(cloudTextureBMP, format, 0)))        SDL_Log("SDL_ConvertSurface clouds failed: %s\n", SDL_GetError());
+    SDL_FreeSurface(wallTextureBMP);
+    SDL_FreeSurface(floorTextureBMP);
+    SDL_FreeSurface(cloudTextureBMP);
     SDL_FreeFormat(format);
 
-    SDL_LockSurface(texture);
-    SDL_LockSurface(clouds);
-    textel = (int32 *) texture->pixels;
-    cloudel = (int32 *) clouds->pixels;
+    SDL_LockSurface(wallTexture);
+    SDL_LockSurface(floorTexture);
+    SDL_LockSurface(cloudTexture);
+    wallTextel = (int32 *) wallTexture->pixels;
+    floorTextel = (int32 *) floorTexture->pixels;
+    cloudTextel = (int32 *) cloudTexture->pixels;
 
     /////////////////////
     // generate maze data
@@ -642,8 +649,8 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
     for( row = 1; row < SH/2; row ++ )
     {
-        int iMipTextureRow = 0;
-        int iMipTextureWidth = TW;
+        int iMipWallTextureRow = 0;
+        int iMipWallTextureWidth = TW;
         float dv = float(TW) / float(row*2);
 
         i = 0;
@@ -658,12 +665,12 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     iMipMapLevelRow[0] = 0;
 
     int iMipMapRow = 0;
-    int iMipMapTextureWidth = TW;
+    int iMipMapWallTextureWidth = TW;
     for( i=0; i<9; i++ )
     {
-        iMipMapTextureOffset[ 8-i ] = iMipMapRow * TW;
-        iMipMapRow += iMipMapTextureWidth;
-        iMipMapTextureWidth /= 2;
+        iMipMapWallTextureOffset[ 8-i ] = iMipMapRow * TW;
+        iMipMapRow += iMipMapWallTextureWidth;
+        iMipMapWallTextureWidth /= 2;
     }
 
     /////////////////////
@@ -689,10 +696,12 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 #endif
 
     SDL_Log("Quitting\n");
-    SDL_UnlockSurface(clouds);
-    SDL_UnlockSurface(texture);
-    SDL_FreeSurface(clouds);
-    SDL_FreeSurface(texture);
+    SDL_UnlockSurface(wallTexture);
+    SDL_UnlockSurface(floorTexture);
+    SDL_UnlockSurface(cloudTexture);
+    SDL_FreeSurface(wallTexture);
+    SDL_FreeSurface(floorTexture);
+    SDL_FreeSurface(cloudTexture);
     SDL_FreeSurface(screen);
     SDL_DestroyWindow(window);
     SDL_Quit();
