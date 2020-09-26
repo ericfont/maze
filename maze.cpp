@@ -407,14 +407,6 @@ void mainloopdraw() {
   SDL_LockSurface(screen);
   // ARGB
   *((int*)screen->pixels + 0) = 0xFFFF0000;
-  *((int*)screen->pixels + 1) = 0xFF00FF00;
-  *((int*)screen->pixels + 2) = 0xFF0000FF;
-  *((int*)screen->pixels + 3) = 0xFFFFFFFF;
-  *((int*)screen->pixels + 10*SW + 10) = 0xFFFFFFFF;
-  *((int*)screen->pixels + 20*SW + 20) = 0xFFFFFFFF;
-  *((int*)screen->pixels + 100*SW + 100) = 0xFFF00FFF;
-  *((int*)screen->pixels + 200*SW + 200) = 0xFFF00FFF;
-  *((int*)screen->pixels + 4) = 0x00000000;
 
   *((int*)screen->pixels + (count%SH)*SW)= 0xFF000000;  // moving pixel
   SDL_UnlockSurface(screen);
@@ -562,13 +554,18 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 	}
  
     // screen is the SW*SH surface where pixel editing is done, which gets resized to window or canvas
-    screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_BGR24);
+    screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_RGBA8888);
 
-	// loads images
-    if(!(texture = SDL_LoadBMP("assets/images/wallmipmap.bmp")))
-        SDL_Log("SDL_LoadBMP texture failed: %s\n", SDL_GetError());
-    if(!(clouds = SDL_LoadBMP("assets/images/clouds.bmp")))
-        SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
+    // load images
+    SDL_PixelFormat *format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface *textureBMP, *cloudsBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
+    if(!(textureBMP = SDL_LoadBMP("assets/images/wallmipmap.bmp"))) SDL_Log("SDL_LoadBMP texture failed: %s\n", SDL_GetError());
+    if(!(cloudsBMP = SDL_LoadBMP("assets/images/clouds.bmp")))      SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
+    if(!(texture = SDL_ConvertSurface(textureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface texture failed: %s\n", SDL_GetError());
+    if(!(clouds = SDL_ConvertSurface(cloudsBMP, format, 0)))        SDL_Log("SDL_ConvertSurface clouds failed: %s\n", SDL_GetError());
+    SDL_FreeSurface(textureBMP);
+    SDL_FreeSurface(cloudsBMP);
+    SDL_FreeFormat(format);
 
     SDL_LockSurface(texture);
     SDL_LockSurface(clouds);
