@@ -56,11 +56,12 @@ SDL_Surface *screen;
 SDL_Surface *texture;
 SDL_Surface *clouds;
 
-Uint32 *pixel   = NULL;
-Uint32 *textel  = NULL;
-Uint32 *cloudel = NULL;
+typedef Sint32 int32;
 
-/*
+int32 *pixel   = NULL;
+int32 *textel  = NULL;
+int32 *cloudel = NULL;
+
 int iPosDirs[24][4] = {
     { 0, 1, 2, 3 }, { 0, 1, 3, 2 }, { 0, 2, 1, 3 }, { 0, 2, 3, 1 }, { 0, 3, 1, 2 }, { 0, 3, 2, 1 },
     { 1, 0, 2, 3 }, { 1, 0, 3, 2 }, { 1, 2, 0, 3 }, { 1, 2, 3, 0 }, { 1, 3, 0, 2 }, { 1, 3, 2, 0 },
@@ -368,7 +369,7 @@ void vRaycast()
 			angle -= TWOPI;
 	}
 }
-
+/*
 bool bTestIfCanMove()
 {
 	if( fNewX < 0.0f || fNewY < 0.0f )
@@ -401,20 +402,9 @@ int count = 0;
 double lasttime = 0;
 SDL_Rect screenRect {0, 0, SW, SH};
 
-void mainloopdraw() {
-
-  SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 128, 128, 128));
-  SDL_LockSurface(screen);
-  // ARGB
-  *((int*)screen->pixels + 0) = 0xFFFF0000;
-
-  *((int*)screen->pixels + (count%SH)*SW)= 0xFF000000;  // moving pixel
-  SDL_UnlockSurface(screen);
-
-  // Draw
+void copyScreenPixelsToWindow() {
   SDL_Texture *screenTexture = SDL_CreateTextureFromSurface(renderer, screen);
-  SDL_RenderClear(renderer);
-  
+  SDL_RenderClear(renderer);  
   SDL_RenderCopy(renderer, screenTexture, NULL, NULL);
   SDL_RenderPresent(renderer);
   SDL_DestroyTexture(screenTexture);
@@ -526,7 +516,35 @@ void mainloop(void *arg)
         }
     }
 
-	mainloopdraw();
+    fPlayerDeltaAngle *= kAngleFriction;
+
+    fPlayerAngle += fPlayerDeltaAngle;
+
+    if( fPlayerAngle < 0.0f )
+        fPlayerAngle += TWOPI;
+
+    else if( fPlayerAngle >= TWOPI )
+        fPlayerAngle -= TWOPI;
+
+    fPlayerSpeed *= kSpeedFriction;
+    fNewY = fPlayerY + (float) sin( fPlayerAngle ) * fPlayerSpeed;
+    fNewX = fPlayerX + (float) cos( fPlayerAngle ) * fPlayerSpeed;
+
+    /*if( bTestIfCanMove() )
+    {
+        fPlayerY = fNewY;
+        fPlayerX = fNewX;
+    }
+    else*/
+        fPlayerSpeed = 0.0f;
+
+
+    SDL_LockSurface(screen);
+    pixel = (int32*) screen->pixels;
+    vRaycast();
+    SDL_UnlockSurface(screen);
+
+    copyScreenPixelsToWindow();
 
 	double time = SDL_GetTicks();
  // printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count, time-lasttime, 1000.0/(time-lasttime));
@@ -539,6 +557,7 @@ void mainloop(void *arg)
 int main(int argc, char* argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
+    Uint32 starttime = lasttime = SDL_GetTicks();
 
 	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
 	if (window == NULL) {
@@ -556,7 +575,10 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     // screen is the SW*SH surface where pixel editing is done, which gets resized to window or canvas
     screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_RGBA8888);
 
+    /////////////////////
     // load images
+    /////////////////////
+
     SDL_PixelFormat *format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
     SDL_Surface *textureBMP, *cloudsBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
     if(!(textureBMP = SDL_LoadBMP("assets/images/wallmipmap.bmp"))) SDL_Log("SDL_LoadBMP texture failed: %s\n", SDL_GetError());
@@ -569,10 +591,54 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
     SDL_LockSurface(texture);
     SDL_LockSurface(clouds);
-    textel = (Uint32 *) texture->pixels;
-    cloudel = (Uint32 *) clouds->pixels;
+    textel = (int32 *) texture->pixels;
+    cloudel = (int32 *) clouds->pixels;
 
-  Uint32 starttime = lasttime = SDL_GetTicks();
+    /////////////////////
+    // generate maze data
+    /////////////////////
+
+    memset( bHorzWalls, true, sizeof( bHorzWalls ) );
+    memset( bVertWalls, true, sizeof( bVertWalls ) );
+    memset( bVisited, false, sizeof( bVisited ) );
+
+    srand( starttime );
+
+    vGenerateMaze( 0, 0 );
+
+    for( ray = 0; ray < SW; ray++ )
+        fFishFactor[ ray ] = (float) cos( ( float(ray) / float(SW) * FOV ) - ( FOV / 2.0f ) );
+
+    for( row = 1; row < SH/2; row ++ )
+    {
+        int iMipTextureRow = 0;
+        int iMipTextureWidth = TW;
+        float dv = float(TW) / float(row*2);
+
+        i = 0;
+        while( dv > 1.0f )
+        {
+            dv /= 2.0f;
+            i++;
+        }
+
+        iMipMapLevelRow[ row ] = 8-i;
+    }
+    iMipMapLevelRow[0] = 0;
+
+    int iMipMapRow = 0;
+    int iMipMapTextureWidth = TW;
+    for( i=0; i<9; i++ )
+    {
+        iMipMapTextureOffset[ 8-i ] = iMipMapRow * TW;
+        iMipMapRow += iMipMapTextureWidth;
+        iMipMapTextureWidth /= 2;
+    }
+
+    /////////////////////
+    // main loop
+    /////////////////////
+
 #ifdef __EMSCRIPTEN__
     int newWidth = body_get_width();
     int newHeight = window_get_height() - 300;
@@ -603,42 +669,6 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     return 0;
 }
 /*
-		memset( bHorzWalls, true, sizeof( bHorzWalls ) );
-		memset( bVertWalls, true, sizeof( bVertWalls ) );
-		memset( bVisited, false, sizeof( bVisited ) );
-        
-		srand( GetTickCount() );
-
-		vGenerateMaze( 0, 0 );
-
-		for( ray = 0; ray < SW; ray++ )
-			fFishFactor[ ray ] = (float) cos( ( float(ray) / float(SW) * FOV ) - ( FOV / 2.0f ) );
-
-		for( row = 1; row < SH/2; row ++ )
-		{
-			int iMipTextureRow = 0;
-			int iMipTextureWidth = TW;
-			float dv = float(TW) / float(row*2);
-
-			i = 0;
-			while( dv > 1.0f )
-			{
-				dv /= 2.0f;
-				i++;
-			}
-
-			iMipMapLevelRow[ row ] = 8-i;
-		}
-		iMipMapLevelRow[0] = 0;
-
-		int iMipMapRow = 0;
-		int iMipMapTextureWidth = TW;
-		for( i=0; i<9; i++ )
-		{
-			iMipMapTextureOffset[ 8-i ] = iMipMapRow * TW;
-			iMipMapRow += iMipMapTextureWidth;
-			iMipMapTextureWidth /= 2;
-		}
 
         while( true )
         {
@@ -681,31 +711,6 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 				}
 			}
 
-			fPlayerDeltaAngle *= kAngleFriction;
-
-			fPlayerAngle += fPlayerDeltaAngle;
-
-			if( fPlayerAngle < 0.0f )
-				fPlayerAngle += TWOPI;
-
-			else if( fPlayerAngle >= TWOPI )
-				fPlayerAngle -= TWOPI;
-
-			fPlayerSpeed *= kSpeedFriction;
-			fNewY = fPlayerY + (float) sin( fPlayerAngle ) * fPlayerSpeed;
-			fNewX = fPlayerX + (float) cos( fPlayerAngle ) * fPlayerSpeed;
-
-			if( bTestIfCanMove() )
-			{
-				fPlayerY = fNewY;
-				fPlayerX = fNewX;
-			}
-			else
-				fPlayerSpeed = 0.0f;
-
-			pixel = (int32*) surface.lock();
-
-			vRaycast();
 
 			surface.unlock();
 			surface.copy(console);
