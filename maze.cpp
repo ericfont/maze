@@ -403,24 +403,29 @@ SDL_Rect screenRect {0, 0, SW, SH};
 
 void mainloopdraw() {
 
-  SDL_FillRect(screen, NULL, SDL_MapRGBA(screen->format, 0xcc, 0xcc, 0xcc, 0xff));
+  SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 128, 128, 128));
   SDL_LockSurface(screen);
   // ARGB
   *((int*)screen->pixels + 0) = 0xFFFF0000;
   *((int*)screen->pixels + 1) = 0xFF00FF00;
   *((int*)screen->pixels + 2) = 0xFF0000FF;
   *((int*)screen->pixels + 3) = 0xFFFFFFFF;
+  *((int*)screen->pixels + 10*SW + 10) = 0xFFFFFFFF;
+  *((int*)screen->pixels + 20*SW + 20) = 0xFFFFFFFF;
+  *((int*)screen->pixels + 100*SW + 100) = 0xFFF00FFF;
+  *((int*)screen->pixels + 200*SW + 200) = 0xFFF00FFF;
   *((int*)screen->pixels + 4) = 0x00000000;
 
-  *((int*)screen->pixels + count)= 0xFF000000;  // moving pixel
+  *((int*)screen->pixels + (count%SH)*SW)= 0xFF000000;  // moving pixel
   SDL_UnlockSurface(screen);
 
   // Draw
-  SDL_Texture *tex = SDL_CreateTextureFromSurface(renderer, screen);
+  SDL_Texture *screenTexture = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);
-  SDL_RenderCopy(renderer, tex, NULL, NULL);
+  
+  SDL_RenderCopy(renderer, screenTexture, NULL, NULL);
   SDL_RenderPresent(renderer);
-  SDL_DestroyTexture(tex); 
+  SDL_DestroyTexture(screenTexture);
 }
 
 
@@ -434,30 +439,79 @@ EM_JS(int, canvas_get_height, (), {
 });
 
 EM_JS(int, body_get_width, (), {
-  var body = document.getElementsByTagName("body")[0];
-  return body.clientWidth;
+  return document.getElementsByTagName("body")[0].clientWidth;
 });
 
 EM_JS(int, body_get_height, (), {
-  var body = document.getElementsByTagName("body")[0];
-  return body.clientHeight;
+  return document.getElementsByTagName("body")[0].clientHeight;
 });
+
+EM_JS(int, window_get_width, (), {
+  return window.innerWidth;
+});
+
+EM_JS(int, window_get_height, (), {
+  return window.innerHeight;
+});
+
+EM_JS(int, document_is_fullscreen, (), {
+	return document.fullscreen;
+});
+
+EM_BOOL emscripten_window_resized_callback(int eventType, const void *reserved, void *userData){
+
+    double width, height;
+    emscripten_get_element_css_size("canvas", &width, &height);
+    printf("emscripten_window_resized_callback: %.0f x %.0f\n", width, height);
+
+    // resize SDL window
+    SDL_SetWindowSize(window, width, height);
+
+    return true;
+}
+
+const char *emscripten_result_to_string(EMSCRIPTEN_RESULT result) {
+  if (result == EMSCRIPTEN_RESULT_SUCCESS) return "EMSCRIPTEN_RESULT_SUCCESS";
+  if (result == EMSCRIPTEN_RESULT_DEFERRED) return "EMSCRIPTEN_RESULT_DEFERRED";
+  if (result == EMSCRIPTEN_RESULT_NOT_SUPPORTED) return "EMSCRIPTEN_RESULT_NOT_SUPPORTED";
+  if (result == EMSCRIPTEN_RESULT_FAILED_NOT_DEFERRED) return "EMSCRIPTEN_RESULT_FAILED_NOT_DEFERRED";
+  if (result == EMSCRIPTEN_RESULT_INVALID_TARGET) return "EMSCRIPTEN_RESULT_INVALID_TARGET";
+  if (result == EMSCRIPTEN_RESULT_UNKNOWN_TARGET) return "EMSCRIPTEN_RESULT_UNKNOWN_TARGET";
+  if (result == EMSCRIPTEN_RESULT_INVALID_PARAM) return "EMSCRIPTEN_RESULT_INVALID_PARAM";
+  if (result == EMSCRIPTEN_RESULT_FAILED) return "EMSCRIPTEN_RESULT_FAILED";
+  if (result == EMSCRIPTEN_RESULT_NO_DATA) return "EMSCRIPTEN_RESULT_NO_DATA";
+  return "Unknown EMSCRIPTEN_RESULT!";
+}
+
+#define CHECK_EMSCRIPTEN_RESULT(func) {EMSCRIPTEN_RESULT ret = func; if (ret != EMSCRIPTEN_RESULT_SUCCESS) printf("%s returned %s.\n", #func, emscripten_result_to_string(ret));}
 
 void setNewCanvasSize(int newWidth, int newHeight)
 {
   printf( "setNewCanvasSize %d x %d\n", newWidth, newHeight);
 
-  emscripten_set_canvas_element_size("canvas", newWidth, newHeight);
+  CHECK_EMSCRIPTEN_RESULT(emscripten_set_canvas_element_size("canvas", newWidth, newHeight));
+
   SDL_SetWindowSize(window, newWidth, newHeight);
 }
 
 EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawState)
 {
+
+  if(document_is_fullscreen()) {
+          printf("document_is_fullscreen()\n");
+          EmscriptenFullscreenStrategy emFullscreenStrategy;
+          emFullscreenStrategy.scaleMode = EMSCRIPTEN_FULLSCREEN_CANVAS_SCALE_STDDEF;
+          emFullscreenStrategy.filteringMode = EMSCRIPTEN_FULLSCREEN_FILTERING_NEAREST;
+          emFullscreenStrategy.canvasResizedCallback = emscripten_window_resized_callback;
+          emFullscreenStrategy.canvasResizedCallbackUserData = 0;
+          emscripten_enter_soft_fullscreen("canvas", &emFullscreenStrategy);
+          setNewCanvasSize(SW, SH);
+          return 0;
+      }
+
   int newWidth = body_get_width();//(int) e->documentBodyClientWidth;
   int newHeight = (int) e->windowInnerHeight;
   printf( "captureResizeEvent %d x %d\n", newWidth, newHeight);
-
-  // give a vertical space for console
   setNewCanvasSize(newWidth, newHeight - 300);
 
   return 0;
@@ -485,13 +539,12 @@ void PrintEvent(const SDL_Event * event)
             printf("Window %d resized to %dx%d\n",
                     event->window.windowID, event->window.data1,
                     event->window.data2);
-  			setNewCanvasSize(event->window.data1, event->window.data2/2 - 300);
+            setNewCanvasSize(event->window.data1, event->window.data2 - 300);
             break;
         case SDL_WINDOWEVENT_SIZE_CHANGED:
             printf("Window %d size changed to %dx%d\n",
                     event->window.windowID, event->window.data1,
                     event->window.data2);
-  		//	setNewCanvasSize(event->window.data1, event->window.data2 - 300);
             break;
         case SDL_WINDOWEVENT_MINIMIZED:
             printf("Window %d minimized\n", event->window.windowID);
@@ -501,13 +554,6 @@ void PrintEvent(const SDL_Event * event)
             break;
         case SDL_WINDOWEVENT_RESTORED:
             printf("Window %d restored\n", event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_ENTER:
-            printf("Mouse entered window %d\n",
-                    event->window.windowID);
-            break;
-        case SDL_WINDOWEVENT_LEAVE:
-            printf("Mouse left window %d\n", event->window.windowID);
             break;
         case SDL_WINDOWEVENT_FOCUS_GAINED:
             printf("Window %d gained keyboard focus\n",
@@ -537,13 +583,12 @@ void PrintEvent(const SDL_Event * event)
 }
 #endif
 
-void mainloop(void *arg) {
+void mainloop(void *arg)
+{
 	bool *receivedquit = (bool*) arg;
 	SDL_Event event;
-    while (SDL_PollEvent(&event)) 
-    {
-        switch (event.type) 
-        {
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
         case SDL_QUIT:
 			printf("\nSDL_QUIT signal received.\n\n");
 #ifdef __EMSCRIPTEN__
@@ -552,10 +597,10 @@ void mainloop(void *arg) {
 			*receivedquit = true;
 			return;
         case SDL_WINDOWEVENT:
-#ifdef __EMSCRIPTEN__
-			PrintEvent(&event);
-#endif
-
+//#ifdef __EMSCRIPTEN__
+//			PrintEvent(&event);
+//#endif
+break;
 		}
 	}
     
@@ -575,7 +620,7 @@ int main(int argc, char* argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
 
-	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW/2, SH/2, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
 	if (window == NULL) {
 		fprintf(stderr, "Error: %s\n", SDL_GetError());
 		return -1;
@@ -604,15 +649,12 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
   Uint32 starttime = lasttime = SDL_GetTicks();
 #ifdef __EMSCRIPTEN__
-// Then call
-int width = body_get_width();
-int height = canvas_get_height();
-printf("setting initial canvas Size %d x %d\n", width, height);
-setNewCanvasSize(width, height);
-  // Receives a function to call and some user data to provide it.
-  emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, captureResizeEvent);
-  emscripten_set_main_loop_arg(mainloop, 0,-1, 1/*block*/);
- // emscripten_request_animation_frame_loop(one_iter, 0);
+    int newWidth = body_get_width();
+    int newHeight = window_get_height() - 300;
+    printf("setting initial canvas dimensions to %d x %d\n", newWidth, newHeight);
+    setNewCanvasSize(newWidth, newHeight);
+    CHECK_EMSCRIPTEN_RESULT(emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, 0, true, captureResizeEvent));
+    emscripten_set_main_loop_arg(mainloop, 0,-1, 1);
 #else
   while (1) {
 	  bool receivedquit = false;
