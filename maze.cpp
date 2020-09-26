@@ -531,7 +531,7 @@ void mainloop(void *arg)
 #endif
 			*receivedquit = true;
             return;
-		}
+        }
     }
 
 	mainloopdraw();
@@ -568,12 +568,12 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
 
 	// loads images
-/*    texture = SDL_LoadBMP("wallmipmap.bmp");
-    clouds = SDL_LoadBMP("clouds.bmp");
-    SDL_LockSurface(texture);
-    SDL_LockSurface(clouds);
-	textel = (Uint32 *) texture->pixels;
-	cloudel = (Uint32 *) clouds->pixels;*/
+    texture = SDL_LoadBMP("assets/images/wallmipmap.bmp");
+    clouds = SDL_LoadBMP("assets/images/clouds.bmp");
+//    SDL_LockSurface(texture);
+//    SDL_LockSurface(clouds);
+//	textel = (Uint32 *) texture->pixels;
+//    cloudel = (Uint32 *) clouds->pixels;
 
   Uint32 starttime = lasttime = SDL_GetTicks();
 #ifdef __EMSCRIPTEN__
