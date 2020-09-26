@@ -561,11 +561,9 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 		return -1;
 	}
  
-	// screen is the SW*SH surface where pixel editing is done
-//	screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_RGB24);
-  screen = SDL_CreateRGBSurface(0, SW, SH, 32, 0, 0, 0, 0);
-	printf("screen format: %s\n", SDL_GetPixelFormatName(screen->format->format));
-
+    // screen is the SW*SH surface where pixel editing is done, which gets resized to window or canvas
+    screen = SDL_CreateRGBSurface(0, SW, SH, 32, 0, 0, 0, 0);
+    SDL_Log("screen format: %s\n", SDL_GetPixelFormatName(screen->format->format));
 
 	// loads images
     if(!(texture = SDL_LoadBMP("assets/images/wallmipmap.bmp")))
@@ -602,6 +600,7 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     SDL_UnlockSurface(texture);
     SDL_FreeSurface(clouds);
     SDL_FreeSurface(texture);
+    SDL_FreeSurface(screen);
     SDL_DestroyWindow(window);
     SDL_Quit();
     SDL_Log("Bye!\n");
