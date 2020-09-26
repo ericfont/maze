@@ -5,6 +5,9 @@
 #endif
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_keyboard.h>
+#include <SDL2/SDL_stdinc.h>
+#include <SDL2/SDL_scancode.h>
 #include <stdlib.h>
 #include <math.h>
 
@@ -513,6 +516,34 @@ void mainloop(void *arg)
 #endif
 			*receivedquit = true;
             return;
+
+            // get input{
+        case SDL_KEYDOWN:
+                //Select surfaces based on key press
+                switch( event.key.keysym.sym )
+                {
+
+
+                    case SDLK_LEFT:
+                    fPlayerDeltaAngle -= 0.025f;
+                    break;
+
+                    case SDLK_RIGHT:
+                    fPlayerDeltaAngle += 0.025f;
+                    break;
+
+                    case SDLK_UP:
+                    fPlayerSpeed += 0.01f;
+                    break;
+
+                    case SDLK_DOWN:
+                    fPlayerSpeed -= 0.01f;
+                    break;
+
+                    default:
+                    break;
+                }
+            break;
         }
     }
 
@@ -668,58 +699,3 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     SDL_Log("Bye!\n");
     return 0;
 }
-/*
-
-        while( true )
-        {
-			// get input
-			while( console.key() )
-			{
-				Key key = console.read();
-
-				switch( key.code() )
-				{
-				case Key::LEFT:
-					fPlayerDeltaAngle -= 0.025f;
-					break;
-
-				case Key::RIGHT:
-					fPlayerDeltaAngle += 0.025f;
-					break;
-
-				case Key::UP:
-					fPlayerSpeed += 0.01f;
-					break;
-
-				case Key::DOWN:
-					fPlayerSpeed -= 0.01f;
-					break;
-
-				case Key::PAGEDOWN:
-					if( iWallHeight > 0 )
-						iWallHeight--;
-					break;
-
-				case Key::PAGEUP:
-					iWallHeight++;
-					break;
-
-				case Key::ESCAPE:
-					texture.unlock();
-					clouds.unlock();
-					return 0;
-				}
-			}
-
-
-			surface.unlock();
-			surface.copy(console);
-			console.update();
-        }
-    }
-    catch (Error &error)
-    {
-        error.report();
-    }
-    return 0;
-}*/
