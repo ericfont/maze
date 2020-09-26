@@ -59,6 +59,7 @@ SDL_Surface *screen;
 SDL_Surface *wallTexture;
 SDL_Surface *floorTexture;
 SDL_Surface *cloudTexture;
+SDL_Surface *covidTexture;
 
 typedef Sint32 int32;
 
@@ -408,11 +409,12 @@ double lasttime = 0;
 SDL_Rect screenRect {0, 0, SW, SH};
 
 void copyScreenPixelsToWindow() {
-  SDL_Texture *screenWallTexture = SDL_CreateTextureFromSurface(renderer, screen);
+  SDL_Texture *screenScalingTexture = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);  
-  SDL_RenderCopy(renderer, screenWallTexture, NULL, NULL);
+  SDL_RenderCopy(renderer, screenScalingTexture, NULL, NULL);
+ // SDL_RenderCopy(renderer, covidTexture, NULL, NULL);
   SDL_RenderPresent(renderer);
-  SDL_DestroyTexture(screenWallTexture);
+  SDL_DestroyTexture(screenScalingTexture);
 }
 
 
@@ -617,6 +619,7 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     if(!(wallTextureBMP = SDL_LoadBMP("assets/images/wallmipmap.bmp"))) SDL_Log("SDL_LoadBMP wallTextureBMP failed: %s\n", SDL_GetError());
     if(!(floorTextureBMP = SDL_LoadBMP("assets/images/floormipmap.bmp"))) SDL_Log("SDL_LoadBMP textureFloorBMP failed: %s\n", SDL_GetError());
     if(!(cloudTextureBMP = SDL_LoadBMP("assets/images/clouds.bmp")))      SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
+    if(!(covidTexture = SDL_LoadBMP("assets/images/covid-transparent-256x256.bmp")))      SDL_Log("SDL_LoadBMP covidTexture failed: %s\n", SDL_GetError());
     if(!(wallTexture = SDL_ConvertSurface(wallTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface WallTextureWall failed: %s\n", SDL_GetError());
     if(!(floorTexture = SDL_ConvertSurface(floorTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface WallTextureWall failed: %s\n", SDL_GetError());
     if(!(cloudTexture = SDL_ConvertSurface(cloudTextureBMP, format, 0)))        SDL_Log("SDL_ConvertSurface clouds failed: %s\n", SDL_GetError());
@@ -702,6 +705,7 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     SDL_FreeSurface(wallTexture);
     SDL_FreeSurface(floorTexture);
     SDL_FreeSurface(cloudTexture);
+    SDL_FreeSurface(covidTexture);
     SDL_FreeSurface(screen);
     SDL_DestroyWindow(window);
     SDL_Quit();
