@@ -48,8 +48,8 @@ int ray,i,row;
 int iMipMapWallTextureOffset[ 9 ];
 int iMipMapLevelRow[ SH/2 ];
 
-bool bHorzWalls[ MH+1 ][ MW ];
-bool bVertWalls[ MH ][ MW+1 ];
+bool bWallsX[ MH+1 ][ MW ];
+bool bWallsY[ MH ][ MW+1 ];
 bool bVisited[ MH ][ MW ];
 
 SDL_Window *window;
@@ -151,28 +151,28 @@ void vGenerateMaze( int y, int x )
 		case 0:
 			if( !bVisited[y-1][x] )
 			{
-				bHorzWalls[y][x] = false;
+                bWallsX[y][x] = false;
 				vGenerateMaze( y-1, x );
 			}
 			break;
 		case 1:
 			if( !bVisited[y][x-1] )
 			{
-				bVertWalls[y][x] = false;
+                bWallsY[y][x] = false;
 				vGenerateMaze( y, x-1 );
 			}
 			break;
 		case 2:
 			if( !bVisited[y][x+1] )
 			{
-				bVertWalls[y][x+1] = false;
+                bWallsY[y][x+1] = false;
 				vGenerateMaze( y, x+1 );
 			}
 			break;
 		case 3:
 			if( !bVisited[y+1][x] )
 			{
-				bHorzWalls[y+1][x] = false;
+                bWallsX[y+1][x] = false;
 				vGenerateMaze( y+1, x );
 			}
 		}
@@ -186,7 +186,7 @@ void vDrawMaze()
 	{
 		for( x=0; x<MW; x++ )
 		{
-			if( bHorzWalls[y][x] )
+            if( bWallsX[y][x] )
 			{
 				for( i=0; i<=2; i++ )
 					pixel[ x*2 + y*2*SW + i ] = 16777215;
@@ -197,7 +197,7 @@ void vDrawMaze()
 	{
 		for( x=0; x<MW+1; x++ )
 		{
-			if( bVertWalls[y][x] )
+            if( bWallsY[y][x] )
 			{
 				for( i=0; i<=2; i++ )
 					pixel[ x*2 + y*2*SW + i*SW ] = 16777215;
@@ -206,13 +206,12 @@ void vDrawMaze()
 	}
 }
 
-
-float x, y, dx, dy, fDistVert, fDistHorz, fDist, fHorzV, fVertV, v, fTanAngle, fLineHeight, du, u, fLineStart, fLineFinish, fLineIntensity;	
-int32 top, bottom;
-float bottomweight, topweight, angle;
-
 void vRaycast()
 {
+    float x, y, dx, dy, fDistanceToNearestWallsY, fDistanceToNearestWallsX, fDist, fFractionalWallsX, fFractionalWallsY, v, fTanAngle, fLineHeight, du, u, fLineStart, fLineFinish, fLineIntensity;
+    int32 top, bottom;
+    float bottomweight, topweight, angle;
+
 	// ray trace
 	angle = fPlayerAngle - FOV / 2.0f;
 	if( angle < 0.0f )
@@ -222,7 +221,7 @@ void vRaycast()
 	{
 		fTanAngle = (float) tan( angle );
 
-		// first traverse vertical walls
+        // init ray to collide with WallsY
 		if( angle < .5f*PI || 1.5f*PI < angle )		// if ray going right
 		{
 			dx = 1.0f;
@@ -238,14 +237,22 @@ void vRaycast()
 			y = fPlayerY + fTanAngle * ( x - fPlayerX );
 		}
 
+        // find closest WallsY this ray collides into
 		while( true )
-		{
-			// test if in range
-			if( y < 0.0f || float(MH) <= y )
-				break;
+        {
+            // test if in Maze's range
+            if( y < 0.0f ) {
+                y = 0.0f;
+                break;
+            }
+            else if (float(MH) <= y )
+            {
+                y = float(MH);
+                break;
+            }
 
 			// test if collide with wall
-			if( bVertWalls[ int(y) ][ int(x) ] )
+            if( bWallsY[ int(y) ][ int(x) ] )
 				break;
 
 			// move ray
@@ -253,11 +260,11 @@ void vRaycast()
 			y += dy;
 		}
 
-		fVertV = y - float( int(y) );
+        fFractionalWallsY = y - float( int(y) );
 
-		fDistVert = (float) sqrt( ( x - fPlayerX ) * ( x - fPlayerX ) + ( y - fPlayerY ) * ( y - fPlayerY ) );
+        fDistanceToNearestWallsY = (float) sqrt( ( x - fPlayerX ) * ( x - fPlayerX ) + ( y - fPlayerY ) * ( y - fPlayerY ) );
 
-		// then traverse horizontal walls
+        // init ray to collide with WallsX
 		if( 0.0f < angle && angle < PI ) // if ray going up
 		{
 			dx = 1.0f / fTanAngle;
@@ -273,15 +280,22 @@ void vRaycast()
 			x = fPlayerX + 1.0f / fTanAngle * ( y - fPlayerY );
 		}
 
-
+        // find closest WallsX this ray collides into
 		while( true )
 		{
-			// test if in range
-			if( x < 0.0f || float(MW) <= x )
+            // test if in Maze's range
+            if( x < 0.0f ) {
+                x = 0.0f;
 				break;
+            }
+            else if (float(MW) <= x )
+            {
+                x = float(MW);
+                break;
+            }
 
 			// test if collide with wall
-			if( bHorzWalls[ int(y) ][ int(x) ] )
+            if( bWallsX[ int(y) ][ int(x) ] )
 				break;
 
 			// move ray
@@ -289,20 +303,20 @@ void vRaycast()
 			y += dy;
 		}
 
-		fHorzV = x - float( int(x) );
+        fFractionalWallsX = x - float( int(x) );
 
-		fDistHorz = (float) sqrt( ( x - fPlayerX ) * ( x - fPlayerX ) + ( y - fPlayerY ) * ( y - fPlayerY ) );
+        fDistanceToNearestWallsX = (float) sqrt( ( x - fPlayerX ) * ( x - fPlayerX ) + ( y - fPlayerY ) * ( y - fPlayerY ) );
 
-		// determine which is closer
-		if( fDistHorz < fDistVert )
+        // determine which collision (WallsX or WallsY) is closer
+        if( fDistanceToNearestWallsX < fDistanceToNearestWallsY )
 		{
-			fDist = fDistHorz;
-			v = fHorzV;
+            fDist = fDistanceToNearestWallsX;
+            v = fFractionalWallsX;
 		}
 		else
 		{
-			fDist = fDistVert;
-			v = fVertV;
+            fDist = fDistanceToNearestWallsY;
+            v = fFractionalWallsY;
 		}
 
 		int iMipMapLevel, iMipMapOffset, iMipMapWidth;
@@ -404,22 +418,22 @@ bool bTestIfCanMove()
 
 	if( (int)fNewX > (int)fPlayerX )
 	{
-		if( (int)bVertWalls[ int(fPlayerY) ][ int(fPlayerX) + 1 ] )
+        if( (int)bWallsY[ int(fPlayerY) ][ int(fPlayerX) + 1 ] )
 			return false;
 	}
 	if( (int)fNewX < (int)fPlayerX )
 	{
-		if( bVertWalls[ int(fPlayerY) ][ int(fPlayerX) ] )
+        if( bWallsY[ int(fPlayerY) ][ int(fPlayerX) ] )
 			return false;
 	}
 	if( (int)fNewY > (int)fPlayerY )
 	{
-		if(  bHorzWalls[ int(fPlayerY) + 1 ][ int(fPlayerX) ] )
+        if(  bWallsX[ int(fPlayerY) + 1 ][ int(fPlayerX) ] )
 			return false;
 	}
 	if( (int)fNewY < (int)fPlayerY )
 	{
-		if( bHorzWalls[ int(fPlayerY) ][ int(fPlayerX) ] )
+        if( bWallsX[ int(fPlayerY) ][ int(fPlayerX) ] )
 			return false;
 	}
 	return true;
@@ -433,7 +447,7 @@ void copyScreenPixelsToWindow() {
   SDL_Texture *screenScalingTexture = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);  
   SDL_RenderCopy(renderer, screenScalingTexture, NULL, NULL);
-  SDL_RenderCopy(renderer, covidTexture, NULL, NULL);
+//  SDL_RenderCopy(renderer, covidTexture, NULL, NULL);
   SDL_RenderPresent(renderer);
   SDL_DestroyTexture(screenScalingTexture);
 }
@@ -667,8 +681,8 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     // generate maze data
     /////////////////////
 
-    memset( bHorzWalls, true, sizeof( bHorzWalls ) );
-    memset( bVertWalls, true, sizeof( bVertWalls ) );
+    memset( bWallsX, true, sizeof( bWallsX ) );
+    memset( bWallsY, true, sizeof( bWallsY ) );
     memset( bVisited, false, sizeof( bVisited ) );
 
     srand( starttime );
