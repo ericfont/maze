@@ -2,6 +2,7 @@
 #include <emscripten.h>
 #include <emscripten/html5.h>
 #else
+#define NO_STDIO_REDIRECT
 #endif
 
 #include <SDL2/SDL.h>
@@ -50,13 +51,21 @@ int iMipMapLevelRow[ SH/2 ];
 
 bool bWallsX[ MH+1 ][ MW ];
 bool bWallsY[ MH ][ MW+1 ];
-bool bVisited[ MH ][ MW ];
+bool bVisitedWallsX[ MH+1 ][ MW ];
+bool bVisitedWallsY[ MH ][ MW+1 ];
+
+int countVisitedWalls = 0;
+int countTotalWalls = 0;
+
+const Uint32 timeLimit = 5*60*1000; // 5 minute limit
+Uint32 timeCurrent = 0;
+Uint32 timePrevious = 0;
 
 SDL_Window *window;
 SDL_Renderer *renderer;
 
 SDL_Surface *screen;
-SDL_Surface *wallTexture;
+SDL_Surface *shelfTexture;
 SDL_Surface *soldTexture;
 SDL_Surface *floorTexture;
 SDL_Surface *cloudTexture;
@@ -67,7 +76,7 @@ SDL_Texture *covidTexture;
 typedef Sint32 int32;
 
 int32 *pixel   = NULL;
-int32 *wallTextel  = NULL;
+int32 *shelfTextel  = NULL;
 int32 *soldTextel  = NULL;
 int32 *floorTextel  = NULL;
 int32 *cloudTextel = NULL;
@@ -79,6 +88,8 @@ int iPosDirs[24][4] = {
     { 3, 1, 2, 0 }, { 3, 1, 0, 2 }, { 3, 2, 1, 0 }, { 3, 2, 0, 1 }, { 3, 0, 1, 2 }, { 3, 0, 2, 1 }
 };
 
+// recursive
+bool bVisited[ MH ][ MW ];
 void vGenerateMaze( int y, int x )
 {
 	bVisited[y][x] = true;
@@ -211,6 +222,8 @@ void vRaycast()
     float x, y, dx, dy, fDistanceToNearestWallsY, fDistanceToNearestWallsX, fDist, fFractionalWallsX, fFractionalWallsY, v, fTanAngle, fLineHeight, du, u, fLineStart, fLineFinish, fLineIntensity;
     int32 top, bottom;
     float bottomweight, topweight, angle;
+    bool bVisitedWallX, bVisitedWallY;
+    int32 *wallTextelsMipmap;
 
 	// ray trace
 	angle = fPlayerAngle - FOV / 2.0f;
@@ -261,7 +274,7 @@ void vRaycast()
 		}
 
         fFractionalWallsY = y - float( int(y) );
-
+        bVisitedWallY = bVisitedWallsY[(int)y][(int)x];
         fDistanceToNearestWallsY = (float) sqrt( ( x - fPlayerX ) * ( x - fPlayerX ) + ( y - fPlayerY ) * ( y - fPlayerY ) );
 
         // init ray to collide with WallsX
@@ -304,7 +317,7 @@ void vRaycast()
 		}
 
         fFractionalWallsX = x - float( int(x) );
-
+        bVisitedWallX = bVisitedWallsX[(int)y][(int)x];
         fDistanceToNearestWallsX = (float) sqrt( ( x - fPlayerX ) * ( x - fPlayerX ) + ( y - fPlayerY ) * ( y - fPlayerY ) );
 
         // determine which collision (WallsX or WallsY) is closer
@@ -312,11 +325,13 @@ void vRaycast()
 		{
             fDist = fDistanceToNearestWallsX;
             v = fFractionalWallsX;
+            wallTextelsMipmap = bVisitedWallX ? soldTextel : shelfTextel;
 		}
 		else
 		{
             fDist = fDistanceToNearestWallsY;
             v = fFractionalWallsY;
+            wallTextelsMipmap = bVisitedWallY ? soldTextel : shelfTextel;
 		}
 
 		int iMipMapLevel, iMipMapOffset, iMipMapWidth;
@@ -362,27 +377,14 @@ void vRaycast()
         // actually draw the ray's pixel column
 
         // use different texture based on whether visited yet
-        int textureOffset = int( v * float(iMipMapWidth) ) * TW + iMipMapOffset;
-        int32 *WallTextureWalloffset;
-        if (x < 0.0f)
-            x = 0;
-        if (x >= MW)
-            x = MW-1;
-        if (y < 0.0f)
-            y = 0;
-        if (y >= MH)
-            y = MH-1;
+        int32 *wallTextelStart = wallTextelsMipmap + int( v * float(iMipMapWidth) ) * TW + iMipMapOffset;
 
-        if( bVisited[(int)y][(int)x] )
-            WallTextureWalloffset = &wallTextel[textureOffset];
-        else
-            WallTextureWalloffset = &soldTextel[textureOffset];
 
 		pixelend = &pixel[ ray + kMultiplySW( iLineFinish ) ];
 
 		for( ; pixeloffset < pixelend; pixeloffset += SW )
 		{
-            *pixeloffset = *(WallTextureWalloffset + int(u) ) ;
+            *pixeloffset = *(wallTextelStart + int(u) ) ;
 			u += du;
 		}
 
@@ -440,14 +442,18 @@ bool bTestIfCanMove()
 }
 
 int count = 0;
-double lasttime = 0;
-SDL_Rect screenRect {0, 0, SW, SH};
 
 void copyScreenPixelsToWindow() {
   SDL_Texture *screenScalingTexture = SDL_CreateTextureFromSurface(renderer, screen);
   SDL_RenderClear(renderer);  
+
+  float percentFull = 1.0f - float(timeLimit - timeCurrent) / float(timeLimit);
+  int w, h;
+  SDL_RenderGetLogicalSize(renderer, &w, &h);
+  SDL_Rect covidDestRect {0, 0, int(percentFull * float(w)), int(percentFull * float(h)) };
+
   SDL_RenderCopy(renderer, screenScalingTexture, NULL, NULL);
-//  SDL_RenderCopy(renderer, covidTexture, NULL, NULL);
+  SDL_RenderCopy(renderer, covidTexture, NULL, &covidDestRect);
   SDL_RenderPresent(renderer);
   SDL_DestroyTexture(screenScalingTexture);
 }
@@ -544,7 +550,8 @@ EM_BOOL captureResizeEvent(int eventType, const EmscriptenUiEvent *e, void *rawS
 
 void mainloop(void *arg)
 {
-	bool *receivedquit = (bool*) arg;
+    bool *receivedquit = (bool*) arg;
+
 	SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
@@ -561,8 +568,6 @@ void mainloop(void *arg)
                 //Select surfaces based on key press
                 switch( event.key.keysym.sym )
                 {
-
-
                     case SDLK_LEFT:
                     fPlayerDeltaAngle -= 0.025f;
                     break;
@@ -584,6 +589,12 @@ void mainloop(void *arg)
                 }
             break;
         }
+    }
+
+    timeCurrent = SDL_GetTicks();
+    if( timeCurrent > timeLimit) {
+        printf( "GAME OVER. Time's up! COVID got you! Shop faster next time!\n");
+        return;
     }
 
     fPlayerDeltaAngle *= kAngleFriction;
@@ -608,6 +619,17 @@ void mainloop(void *arg)
     else
         fPlayerSpeed = 0.0f;
 
+    if( bWallsX[int(fPlayerY + .5f)][int(fPlayerX)] && bVisitedWallsX[int(fPlayerY + .5f)][int(fPlayerX)] == false) {
+        bVisitedWallsX[int(fPlayerY + .5f)][int(fPlayerX)] = true;
+        countVisitedWalls++;
+        printf( "Visited %d shelves out of %d total shelves. %d seconds left till COVID gets you! Collect more food!\n", countVisitedWalls, countTotalWalls, (timeLimit - timeCurrent) / 1000);
+    }
+    if( bWallsY[int(fPlayerY)][int(fPlayerX + .5f)] && bVisitedWallsY[int(fPlayerY)][int(fPlayerX + .5f)] == false) {
+
+        bVisitedWallsY[int(fPlayerY)][int(fPlayerX + .5f)] = true;
+        countVisitedWalls++;
+        printf( "Visited %d shelves out of %d total shelves. %d seconds left till COVID gets you! Collect more food!\n", countVisitedWalls, countTotalWalls, (timeLimit - timeCurrent) / 1000);
+    }
 
     SDL_LockSurface(screen);
     pixel = (int32*) screen->pixels;
@@ -616,10 +638,8 @@ void mainloop(void *arg)
 
     copyScreenPixelsToWindow();
 
-	double time = SDL_GetTicks();
- // printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count, time-lasttime, 1000.0/(time-lasttime));
+ //   printf("time %.0f, it %d, diff %.2f, fps=%.2f\n", time, count, time-timePrevious, 1000.0/(time-timePrevious));
 
-  lasttime=time;
 	count++;
 }
 
@@ -627,20 +647,21 @@ void mainloop(void *arg)
 int main(int argc, char* argv[])
 {
     SDL_Init(SDL_INIT_VIDEO);
-    Uint32 starttime = lasttime = SDL_GetTicks();
+    Uint32 starttime = timePrevious = SDL_GetTicks();
 
-	window = SDL_CreateWindow("Eric Fontaine's Raycasting Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
+    window = SDL_CreateWindow("Covid Shopping Maze", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, SW, SH, SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI);
 	if (window == NULL) {
 		fprintf(stderr, "Error: %s\n", SDL_GetError());
 		return -1;
 	}
-SDL_SetWindowSize(window, SW*2, SH*2);
+    SDL_SetWindowSize(window, SW, SH);
 
 	renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 	if (renderer == NULL) {
 		fprintf(stderr, "Error: %s\n", SDL_GetError());
 		return -1;
-	}
+    }
+    SDL_RenderSetLogicalSize(renderer, SW, SH);
  
     // screen is the SW*SH surface where pixel editing is done, which gets resized to window or canvas
     screen = SDL_CreateRGBSurfaceWithFormat(0, SW, SH, 24, SDL_PIXELFORMAT_RGBA8888);
@@ -650,17 +671,17 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     /////////////////////
 
     SDL_PixelFormat *format = SDL_AllocFormat(SDL_PIXELFORMAT_RGBA8888);
-    SDL_Surface *wallTextureBMP, *soldTextureBMP, *floorTextureBMP, *cloudTextureBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
-    if(!(wallTextureBMP = SDL_LoadBMP("assets/images/wallmipmap.bmp"))) SDL_Log("SDL_LoadBMP wallTextureBMP failed: %s\n", SDL_GetError());
-    if(!(soldTextureBMP = SDL_LoadBMP("assets/images/soldmipmap.bmp"))) SDL_Log("SDL_LoadBMP soldTextureBMP failed: %s\n", SDL_GetError());
-    if(!(floorTextureBMP = SDL_LoadBMP("assets/images/floormipmap.bmp"))) SDL_Log("SDL_LoadBMP textureFloorBMP failed: %s\n", SDL_GetError());
-    if(!(cloudTextureBMP = SDL_LoadBMP("assets/images/clouds.bmp")))      SDL_Log("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
-    if(!(covidSurface = SDL_LoadBMP("assets/images/covid-transparent-256x256.bmp")))      SDL_Log("SDL_LoadBMP covidTexture failed: %s\n", SDL_GetError());
-    if(!(wallTexture = SDL_ConvertSurface(wallTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface wallTextureBMP failed: %s\n", SDL_GetError());
-    if(!(soldTexture = SDL_ConvertSurface(soldTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface soldTextureBMP failed: %s\n", SDL_GetError());
-    if(!(floorTexture = SDL_ConvertSurface(floorTextureBMP, format, 0)))      SDL_Log("SDL_ConvertSurface floorTextureBMP failed: %s\n", SDL_GetError());
-    if(!(cloudTexture = SDL_ConvertSurface(cloudTextureBMP, format, 0)))        SDL_Log("SDL_ConvertSurface cloudTextureBMP failed: %s\n", SDL_GetError());
-    SDL_FreeSurface(wallTextureBMP);
+    SDL_Surface *shelfTextureBMP, *soldTextureBMP, *floorTextureBMP, *cloudTextureBMP; // first read BMP, then convert to SDL_PIXELFORMAT_RGBA8888
+    if(!(shelfTextureBMP = SDL_LoadBMP("assets/images/shelfmipmap.bmp"))) printf("SDL_LoadBMP shelfTextureBMP failed: %s\n", SDL_GetError());
+    if(!(soldTextureBMP = SDL_LoadBMP("assets/images/soldmipmap.bmp"))) printf("SDL_LoadBMP soldTextureBMP failed: %s\n", SDL_GetError());
+    if(!(floorTextureBMP = SDL_LoadBMP("assets/images/floormipmap.bmp"))) printf("SDL_LoadBMP textureFloorBMP failed: %s\n", SDL_GetError());
+    if(!(cloudTextureBMP = SDL_LoadBMP("assets/images/clouds.bmp")))      printf("SDL_LoadBMP clouds failed: %s\n", SDL_GetError());
+    if(!(covidSurface = SDL_LoadBMP("assets/images/covid-transparent-256x256.bmp")))      printf("SDL_LoadBMP covidTexture failed: %s\n", SDL_GetError());
+    if(!(shelfTexture = SDL_ConvertSurface(shelfTextureBMP, format, 0)))      printf("SDL_ConvertSurface shelfTextureBMP failed: %s\n", SDL_GetError());
+    if(!(soldTexture = SDL_ConvertSurface(soldTextureBMP, format, 0)))      printf("SDL_ConvertSurface soldTextureBMP failed: %s\n", SDL_GetError());
+    if(!(floorTexture = SDL_ConvertSurface(floorTextureBMP, format, 0)))      printf("SDL_ConvertSurface floorTextureBMP failed: %s\n", SDL_GetError());
+    if(!(cloudTexture = SDL_ConvertSurface(cloudTextureBMP, format, 0)))        printf("SDL_ConvertSurface cloudTextureBMP failed: %s\n", SDL_GetError());
+    SDL_FreeSurface(shelfTextureBMP);
     SDL_FreeSurface(soldTextureBMP);
     SDL_FreeSurface(floorTextureBMP);
     SDL_FreeSurface(cloudTextureBMP);
@@ -668,12 +689,12 @@ SDL_SetWindowSize(window, SW*2, SH*2);
 
     covidTexture = SDL_CreateTextureFromSurface(renderer, covidSurface);
 
-    SDL_LockSurface(wallTexture);
+    SDL_LockSurface(shelfTexture);
     SDL_LockSurface(soldTexture);
     SDL_LockSurface(floorTexture);
     SDL_LockSurface(cloudTexture);
-    wallTextel = (int32 *) wallTexture->pixels;
-    soldTextel = (int32 *) soldTexture->pixels;
+    shelfTextel = (int32 *) shelfTexture->pixels;
+    soldTextel  = (int32 *) soldTexture->pixels;
     floorTextel = (int32 *) floorTexture->pixels;
     cloudTextel = (int32 *) cloudTexture->pixels;
 
@@ -684,22 +705,30 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     memset( bWallsX, true, sizeof( bWallsX ) );
     memset( bWallsY, true, sizeof( bWallsY ) );
     memset( bVisited, false, sizeof( bVisited ) );
+    memset( bVisitedWallsX, false, sizeof( bVisitedWallsX ) );
+    memset( bVisitedWallsY, false, sizeof( bVisitedWallsY ) );
 
-    srand( starttime );
+    srand( SDL_GetTicks() );
 
     vGenerateMaze( 0, 0 );
 
-    int numberStockedShelves = 0;
-    while( numberStockedShelves < MW * MH / 2 ) // 50% of the shelves will be stocked (i.e. !bVisited)
+    for( int y = 0; y < MH + 1; y++ )
     {
-        int x = rand() % MW;
-        int y = rand() % MH;
-        if( bVisited[y][x] )
+        for( int x = 0; x < MW; x++ )
         {
-            bVisited[y][x] = 0;
-            numberStockedShelves++;
+            if (bWallsX[y][x] == true)
+                countTotalWalls++;
         }
     }
+    for( int y = 0; y < MH; y++ )
+    {
+        for( int x = 0; x < MW + 1; x++ )
+        {
+            if (bWallsY[y][x] == true)
+                countTotalWalls++;
+        }
+    }
+    printf( "number of Stocked Walls = %d\n", countTotalWalls);
 
     for( ray = 0; ray < SW; ray++ )
         fFishFactor[ ray ] = (float) cos( ( float(ray) / float(SW) * FOV ) - ( FOV / 2.0f ) );
@@ -752,12 +781,12 @@ SDL_SetWindowSize(window, SW*2, SH*2);
   }
 #endif
 
-    SDL_Log("Quitting\n");
-    SDL_UnlockSurface(wallTexture);
+    printf("Quitting\n");
+    SDL_UnlockSurface(shelfTexture);
     SDL_UnlockSurface(soldTexture);
     SDL_UnlockSurface(floorTexture);
     SDL_UnlockSurface(cloudTexture);
-    SDL_FreeSurface(wallTexture);
+    SDL_FreeSurface(shelfTexture);
     SDL_FreeSurface(soldTexture);
     SDL_FreeSurface(floorTexture);
     SDL_FreeSurface(cloudTexture);
@@ -766,6 +795,6 @@ SDL_SetWindowSize(window, SW*2, SH*2);
     SDL_DestroyTexture(covidTexture);
     SDL_DestroyWindow(window);
     SDL_Quit();
-    SDL_Log("Bye!\n");
+    printf("Bye!\n");
     return 0;
 }
